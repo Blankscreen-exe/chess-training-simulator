@@ -140,19 +140,21 @@ picking among Stockfish's best few moves, to make the game more human or to set 
 - Live and preview board layers, with playback controls for previews
 - Board editor and FEN paste
 
-### 2. MCP server and the coach's connection
+### 2. MCP server and the coach's connection (done)
 
 - Stateless Streamable HTTP MCP server on `127.0.0.1`, checking Origin and Host
 - Server instructions
 - `wait_for_event` with its queue of events and the idle cutoff
-- Connected / offline status
+- Connected / offline / paused status
 - Chat panel, through `wait_for_event` and `say`
-- `.mcp.json`, the `claude mcp add` command, and onboarding that ticks off each step
+- `get_game_state`, brought forward from phase 3 so the chat has true facts to talk about
+- `.mcp.json`, the `claude mcp add` command, and setup steps shown until Claude Code connects
+  (only the connection itself can be seen from the app, not each step)
 
 ### 3. Coaching tools and modes
 
-- `get_game_state`, `analyze_position`, `show_candidates`, `play_preview`, `set_position`,
-  `new_game`, `end_game`, `make_move`
+- `analyze_position`, `show_candidates`, `play_preview`, `set_position`, `new_game`, `end_game`,
+  `make_move`
 - Guided, Casual, Coach on blunder and Silent modes, switched in chat or with a toggle
 - The opponent toggle
 - Settings: level, default mode, default opponent

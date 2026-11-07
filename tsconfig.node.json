@@ -7,6 +7,7 @@
   },
   "include": [
     "electron.vite.config.mts",
+    "vite.engine-host.config.mts",
     "vitest.config.mts",
     "src/main/**/*",
     "src/preload/**/*",

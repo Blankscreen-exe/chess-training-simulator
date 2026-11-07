@@ -15,6 +15,7 @@ import type {
   Position,
   Result,
 } from './chess'
+import type { ChatMessage, CoachState } from './coach'
 
 /** The app's name, version and the versions of what it runs on. */
 export interface AppInfo {
@@ -52,6 +53,8 @@ export interface IpcContract {
     args: [request: AnalysisRequest]
     result: Result<{ analysis: Analysis | null }>
   }
+  'coach:get': { args: []; result: CoachState }
+  'coach:send': { args: [text: string]; result: Result<{ message: ChatMessage }> }
 }
 
 export type IpcChannel = keyof IpcContract
@@ -61,6 +64,7 @@ export type IpcResult<C extends IpcChannel> = IpcContract[C]['result']
 /** What the main process tells the renderer without being asked. */
 export interface IpcEvents {
   'game:state': GameState | null
+  'coach:state': CoachState
 }
 
 export type IpcEvent = keyof IpcEvents
@@ -85,6 +89,7 @@ export const API_CHANNELS = {
   position: { describe: 'position:describe', play: 'position:play' },
   line: { resolve: 'line:resolve' },
   analysis: { run: 'analysis:run' },
+  coach: { get: 'coach:get', send: 'coach:send' },
 } as const satisfies ApiTree
 
 export type ApiOf<T> = {

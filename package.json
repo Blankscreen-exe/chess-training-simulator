@@ -12,11 +12,12 @@
     "node": ">=24"
   },
   "scripts": {
-    "dev": "electron-vite dev",
-    "build": "electron-vite build",
+    "dev": "pnpm build:engine-host && electron-vite dev",
+    "build": "electron-vite build && pnpm build:engine-host && node scripts/verify-build.mjs && node scripts/collect-licenses.mjs",
+    "build:engine-host": "vite build --config vite.engine-host.config.mts",
     "preview": "electron-vite preview",
-    "package": "electron-vite build && electron-builder",
-    "package:dir": "electron-vite build && electron-builder --dir",
+    "package": "pnpm build && electron-builder",
+    "package:dir": "pnpm build && electron-builder --dir",
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
     "lint": "eslint .",
     "format": "prettier --write .",
@@ -27,6 +28,7 @@
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@lichess-org/chessground": "^10.5.0",
+    "@modelcontextprotocol/sdk": "^1.32.2",
     "@tailwindcss/vite": "^4.3.4",
     "@types/node": "^24.19.2",
     "@types/react": "^19.3.0",

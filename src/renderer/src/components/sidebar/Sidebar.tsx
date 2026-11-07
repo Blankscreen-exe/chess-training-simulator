@@ -6,15 +6,23 @@ import { SIDEBAR_TABS, type SidebarTab } from './tabs'
 export function Sidebar({
   tab,
   onTabChange,
+  marked,
   children,
 }: {
   tab: SidebarTab
   onTabChange: (tab: SidebarTab) => void
+  /** Tabs with something new in them. */
+  marked?: readonly SidebarTab[]
   children: ReactNode
 }) {
   return (
     <aside className="flex w-96 shrink-0 flex-col overflow-hidden rounded-md border border-stone-800 bg-stone-900">
-      <Tabs tabs={SIDEBAR_TABS} current={tab} onChange={onTabChange} />
+      <Tabs
+        tabs={SIDEBAR_TABS}
+        current={tab}
+        onChange={onTabChange}
+        {...(marked ? { marked } : {})}
+      />
       {children}
     </aside>
   )

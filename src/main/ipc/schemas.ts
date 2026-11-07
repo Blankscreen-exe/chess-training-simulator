@@ -3,6 +3,7 @@
 // the compiler refuses one that would let through, or turn away, what the types say it should.
 import { z } from 'zod'
 import { MAX_ANALYSIS_LINES, PROMOTION_PIECES, SIDE_CHOICES } from '@shared/chess'
+import { MAX_CHAT_LENGTH } from '@shared/coach'
 import { ENGINE_LEVEL_IDS } from '@shared/engine-levels'
 import type { IpcArgs, IpcChannel } from '@shared/ipc'
 import { SQUARE_PATTERN, UCI_MOVE_PATTERN } from '@shared/notation'
@@ -43,4 +44,6 @@ export const ARGUMENTS: { [C in IpcChannel]: z.ZodType<IpcArgs<C>> } = {
   'analysis:run': z.tuple([
     z.strictObject({ fen, lines: z.number().int().min(1).max(MAX_ANALYSIS_LINES) }),
   ]),
+  'coach:get': none,
+  'coach:send': z.tuple([z.string().min(1).max(MAX_CHAT_LENGTH)]),
 }

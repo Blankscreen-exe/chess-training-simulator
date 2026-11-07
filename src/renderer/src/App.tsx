@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react'
 import { AppShell } from './components/AppShell'
 import { BoardArea } from './components/board/BoardArea'
 import { BoardEditor } from './components/BoardEditor'
-import { CoachPanel } from './components/CoachPanel'
+import { CoachPanel } from './components/coach/CoachPanel'
 import { NewGameDialog } from './components/NewGameDialog'
 import { AnalysisPanel } from './components/sidebar/AnalysisPanel'
 import { GameTab } from './components/sidebar/GameTab'
@@ -12,16 +12,19 @@ import type { SidebarTab } from './components/sidebar/tabs'
 import { Button } from './components/ui/Button'
 import { DEFAULT_ANALYSIS_SETTINGS, useAnalysis } from './hooks/useAnalysis'
 import { useBoardView } from './hooks/useBoardView'
+import { useCoach } from './hooks/useCoach'
 import { useLiveGame } from './hooks/useLiveGame'
 import { useMoveKeys } from './hooks/useMoveKeys'
 import { useNotice } from './hooks/useNotice'
 import { useOrientation } from './hooks/useOrientation'
 import { useTrainerActions } from './hooks/useTrainerActions'
+import { useUnread } from './hooks/useUnread'
 import { lineArrows } from './lib/chessground'
 import { isAnalysable } from './state/boardView'
 
 export function App() {
   const game = useLiveGame()
+  const coach = useCoach()
   const board = useBoardView(game)
   const { view, dispatch, position } = board
   const { orientation, setOrientation, flip } = useOrientation(game)
@@ -30,6 +33,8 @@ export function App() {
   /** The new game dialog, when open, with the position it starts from if not the standard one. */
   const [newGame, setNewGame] = useState<{ fen?: string } | null>(null)
   const [analysisSettings, setAnalysisSettings] = useState(DEFAULT_ANALYSIS_SETTINGS)
+  const latestFromCoach = coach?.messages.findLast((message) => message.from === 'coach')?.id ?? 0
+  const coachUnread = useUnread(latestFromCoach, tab === 'coach')
 
   const analysing = analysisSettings.enabled && isAnalysable(view)
   const { analysis, running, error } = useAnalysis(
@@ -116,7 +121,7 @@ export function App() {
           notice={notice}
           notify={notify}
         />
-        <Sidebar tab={tab} onTabChange={setTab}>
+        <Sidebar tab={tab} onTabChange={setTab} marked={coachUnread ? ['coach'] : []}>
           {tab === 'game' && (
             <GameTab
               view={view}
@@ -140,7 +145,7 @@ export function App() {
             />
           )}
           {tab === 'history' && <HistoryPanel onOpen={(id) => void actions.openReplay(id)} />}
-          {tab === 'coach' && <CoachPanel />}
+          {tab === 'coach' && <CoachPanel coach={coach} />}
         </Sidebar>
       </main>
       {dialog}

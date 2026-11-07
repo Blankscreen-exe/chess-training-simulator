@@ -1,17 +1,12 @@
 import { join } from 'node:path'
-import { app, utilityProcess } from 'electron'
+import { utilityProcess } from 'electron'
 import { Listeners } from '../util/listeners'
 import type { UciTransport } from './engine'
-import { ENGINE_FILE, ENGINE_PATH_VARIABLE, PACKAGE_BUILDS } from './stockfish'
 
-/** Where the engine is: copied into the app's resources when packaged, or in node_modules. */
-function enginePath(): string {
-  return app.isPackaged
-    ? join(process.resourcesPath, 'engine', ENGINE_FILE)
-    : join(app.getAppPath(), PACKAGE_BUILDS, ENGINE_FILE)
-}
-
-/** Runs the engine in its own utility process (see host.ts), named `name` in the task manager. */
+/**
+ * Runs the engine in its own utility process (see host.ts), named `name` in the task manager.
+ * The process finds the engine by itself, so nothing from here needs to reach it.
+ */
 export function utilityTransport(name: string): UciTransport {
   const lines = new Listeners<string>()
   const exits = new Listeners<string>()
@@ -19,10 +14,10 @@ export function utilityTransport(name: string): UciTransport {
   const waiting: string[] = []
   let state: 'starting' | 'running' | 'exited' = 'starting'
 
-  const child = utilityProcess.fork(join(__dirname, 'engine-host.js'), [], {
+  // Built on its own into out/engine (vite.engine-host.config.mts); this file is in out/main.
+  const child = utilityProcess.fork(join(__dirname, '..', 'engine', 'host.js'), [], {
     serviceName: name,
     stdio: 'ignore',
-    env: { ...process.env, [ENGINE_PATH_VARIABLE]: enginePath() },
   })
   child.on('spawn', () => {
     state = 'running'

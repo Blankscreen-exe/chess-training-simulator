@@ -5,20 +5,15 @@ import tailwindcss from '@tailwindcss/vite'
 
 const shared = resolve('src/shared')
 
+// The engine's utility process is built separately: see vite.engine-host.config.mts.
 export default defineConfig({
   main: {
     resolve: { alias: { '@shared': shared } },
     build: {
-      // Bundle chess.js and zod into the main process, rather than copying their packages, with
-      // their sources and tests, into the app. Electron and Node's own modules stay outside.
+      // Bundle chess.js, zod and the MCP SDK into the main process, rather than copying their
+      // packages, with their sources and tests, into the app. Electron and Node's own modules
+      // stay outside.
       externalizeDeps: false,
-      rolldownOptions: {
-        input: {
-          index: resolve('src/main/index.ts'),
-          // Runs Stockfish in its own process; see src/main/engine/host.ts.
-          'engine-host': resolve('src/main/engine/host.ts'),
-        },
-      },
     },
   },
   preload: {

@@ -81,14 +81,11 @@ if (!app.requestSingleInstanceLock()) {
     )
     session.defaultSession.setPermissionCheckHandler((_contents, permission) => allowed(permission))
 
-    const started = startServices()
+    const started = startServices((event, payload) => {
+      for (const window of BrowserWindow.getAllWindows()) emit(window.webContents, event, payload)
+    })
     services = started
     registerIpc(baseUrl, started.handlers)
-    started.games.onChange((state) => {
-      for (const window of BrowserWindow.getAllWindows()) {
-        emit(window.webContents, 'game:state', state)
-      }
-    })
     started.games.resume()
 
     createWindow()
@@ -106,8 +103,12 @@ if (!app.requestSingleInstanceLock()) {
     }
   })
 
-  app.on('will-quit', () => {
-    services?.close()
+  // Closing the coach's server and the engines takes a moment; quit once they have.
+  app.on('will-quit', (event) => {
+    if (!services) return
+    event.preventDefault()
+    const closing = services
     services = null
+    void closing.close().finally(() => app.quit())
   })
 }
