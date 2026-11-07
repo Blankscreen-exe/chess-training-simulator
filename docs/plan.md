@@ -116,8 +116,9 @@ picking among Stockfish's best few moves, to make the game more human or to set 
 
 ## Platforms and licence
 
-- Windows, macOS and Linux. Stockfish is the WASM build, so one file runs everywhere (threads need
-  `SharedArrayBuffer`). The only native module is `better-sqlite3`, rebuilt per platform in CI.
+- Windows, macOS and Linux, with no native modules. Stockfish is its lite, single-threaded
+  WebAssembly build: one 2 MB file that runs everywhere, without `SharedArrayBuffer`, in its own
+  Electron utility process. SQLite is Node's own `node:sqlite`, which Electron includes.
 - Packaged with electron-builder: Windows installer, macOS `.dmg`, Linux AppImage and `.deb`.
   Builds are unsigned at first, so the operating system warns once; running from source is also
   documented.
@@ -125,13 +126,13 @@ picking among Stockfish's best few moves, to make the game more human or to set 
 
 ## Phases
 
-### 0. Skeleton
+### 0. Skeleton (done)
 
 - electron-vite with React, TypeScript and Tailwind; `LICENSE` (GPL-3.0); `THIRD_PARTY_NOTICES.md`
 - Main, preload and renderer with typed IPC; `contextIsolation` on, `nodeIntegration` off
 - GitHub Actions: lint, test and build on all three platforms from the start
 
-### 1. Chess without Claude
+### 1. Chess without Claude (done)
 
 - chessground board; chess.js in the main process
 - Stockfish service: analysis of the best few moves, and play at a chosen Elo

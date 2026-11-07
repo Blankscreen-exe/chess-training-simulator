@@ -15,6 +15,16 @@ extraFiles:
     to: LICENSE.txt
   - from: THIRD_PARTY_NOTICES.md
     to: THIRD_PARTY_NOTICES.md
+# Only the one Stockfish build the app uses (about 2 MB), not the whole package (about 200 MB).
+# It sits outside the app's archive, where the engine's process can load it.
+extraResources:
+  - from: node_modules/stockfish/bin
+    to: engine
+    filter:
+      - stockfish-19-lite-single.js
+      - stockfish-19-lite-single.wasm
+  - from: node_modules/stockfish/Copying.txt
+    to: engine/Copying.txt
 
 asar: true
 

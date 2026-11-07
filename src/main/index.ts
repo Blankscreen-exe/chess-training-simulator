@@ -1,21 +1,23 @@
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { app, BrowserWindow, session, shell } from 'electron'
-import { appInfo } from './app-info'
-import { handle } from './ipc'
+import { emit, registerIpc } from './ipc/register'
 import { appBaseUrl, isAppUrl, isExternalWebUrl } from './security'
+import { startServices, type Services } from './services'
 
 // electron-vite sets this while developing. A packaged app ignores it, so nothing in its
 // surroundings can point it at another page.
 const devServerUrl = app.isPackaged ? undefined : process.env['ELECTRON_RENDERER_URL']
 const baseUrl = appBaseUrl(devServerUrl, pathToFileURL(join(__dirname, '../renderer/')).href)
 
+let services: Services | null = null
+
 function createWindow(): BrowserWindow {
   const window = new BrowserWindow({
     width: 1280,
-    height: 800,
-    minWidth: 960,
-    minHeight: 640,
+    height: 820,
+    minWidth: 1024,
+    minHeight: 680,
     show: false,
     backgroundColor: '#0c0a09',
     autoHideMenuBar: true,
@@ -56,7 +58,7 @@ app.on('web-contents-created', (_event, contents) => {
   })
 })
 
-// One copy of the app at a time: a second would compete for the coach's connection.
+// One copy of the app at a time: a second would compete for the game and the coach's connection.
 if (!app.requestSingleInstanceLock()) {
   app.quit()
 } else {
@@ -71,13 +73,23 @@ if (!app.requestSingleInstanceLock()) {
   })
 
   void app.whenReady().then(() => {
-    // The app needs no camera, microphone, notifications or the like.
-    session.defaultSession.setPermissionRequestHandler((_contents, _permission, callback) =>
-      callback(false),
+    // The app needs no camera, microphone, notifications or the like: only to copy text, such as
+    // a game's PGN, to the clipboard.
+    const allowed = (permission: string) => permission === 'clipboard-sanitized-write'
+    session.defaultSession.setPermissionRequestHandler((_contents, permission, callback) =>
+      callback(allowed(permission)),
     )
-    session.defaultSession.setPermissionCheckHandler(() => false)
+    session.defaultSession.setPermissionCheckHandler((_contents, permission) => allowed(permission))
 
-    handle('app:get-info', baseUrl, () => appInfo(app, process))
+    const started = startServices()
+    services = started
+    registerIpc(baseUrl, started.handlers)
+    started.games.onChange((state) => {
+      for (const window of BrowserWindow.getAllWindows()) {
+        emit(window.webContents, 'game:state', state)
+      }
+    })
+    started.games.resume()
 
     createWindow()
 
@@ -92,5 +104,10 @@ if (!app.requestSingleInstanceLock()) {
     if (process.platform !== 'darwin') {
       app.quit()
     }
+  })
+
+  app.on('will-quit', () => {
+    services?.close()
+    services = null
   })
 }

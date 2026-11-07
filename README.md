@@ -7,8 +7,10 @@ there is no API key, and your chats stay in Claude Code's transcripts on your co
 
 Stockfish plays and judges the chess; Claude never acts as the engine.
 
-**Status:** early. This is the skeleton of the app; see [the plan](docs/plan.md) for what comes
-next.
+**Status:** early. The chess works, without the coach yet: play Stockfish at eight strengths from
+the start or from a position you set up, see its best lines with arrows and watch them played
+out, try moves on an analysis board, and step back through your games, which are kept on your
+computer. Claude's coaching comes next; see [the plan](docs/plan.md).
 
 ## Running it from source
 
@@ -30,9 +32,31 @@ pnpm dev
 | `pnpm typecheck`   | Checks the types                                           |
 | `pnpm format`      | Formats the code with Prettier                             |
 
-Only packages the main process loads while running go in `dependencies`: they are copied into the
-packaged app. Everything the renderer uses, React included, is bundled by Vite, so it goes in
-`devDependencies` with the build tools.
+Every package is bundled into the app by Vite, for the main process as for the page, so all of
+them go in `devDependencies`. `dependencies` is only for a package that cannot be bundled, which
+electron-builder would then copy into the app whole; there are none. Stockfish is the exception to
+both: it runs in its own process, and `electron-builder.yml` copies just the one build of it the
+app uses.
+
+## How the code is organised
+
+The main process decides everything about the chess; the page only shows it and asks. They meet
+through one typed contract.
+
+| Folder              | What is in it                                                                                                              |
+| ------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| `src/shared`        | The vocabulary both sides use: chess types and their allowed values, engine levels, notation helpers, and the IPC contract |
+| `src/main/chess`    | The rules, through chess.js: legal moves, checking positions, how games end                                                |
+| `src/main/games`    | A game, its storage in SQLite, and the service that plays it against the engine                                            |
+| `src/main/engine`   | Stockfish: the UCI protocol, strength levels, and running it in its own process                                            |
+| `src/main/analysis` | The engine's best lines for a position                                                                                     |
+| `src/main/ipc`      | Checking every request from the page against a schema, and answering it                                                    |
+| `src/preload`       | `window.api`, built from the contract                                                                                      |
+| `src/renderer/src`  | The React app: `state` (what the board shows, as a reducer), `hooks`, `components`, and `lib` (pure helpers)               |
+
+Adding a request from the page means three edits, each checked by the compiler: the channel in
+`src/shared/ipc.ts`, its argument schema in `src/main/ipc/schemas.ts`, and its handler in
+`src/main/services.ts`.
 
 ## Licence
 
