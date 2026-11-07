@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { GameRecord, LineStep } from '@shared/chess'
 import { START_FEN } from '@shared/chess'
-import { gameState, playedMoves, position } from '@test-support/fixtures'
+import { gameState, playedMoves, position, puzzleState } from '@test-support/fixtures'
 import {
   actionFor,
   afterPly,
@@ -138,9 +138,9 @@ describe('stepRange', () => {
 
 describe('shownPosition', () => {
   it('shows the live position, with its moves, only when it is current', () => {
-    expect(shownPosition(LIVE, game)).toBe(game.position)
-    expect(hasMoves(shownPosition({ kind: 'live', ply: 1 }, game))).toBe(false)
-    expect(shownPosition(LIVE, null).fen).toBe(START_FEN)
+    expect(shownPosition(LIVE, game, null)).toBe(game.position)
+    expect(hasMoves(shownPosition({ kind: 'live', ply: 1 }, game, null))).toBe(false)
+    expect(shownPosition(LIVE, null, null).fen).toBe(START_FEN)
   })
 
   it('never lets a preview be played on', () => {
@@ -154,7 +154,7 @@ describe('shownPosition', () => {
       playing: false,
       returnTo: LIVE,
     }
-    const shown = shownPosition(view, game)
+    const shown = shownPosition(view, game, null)
     expect(shown.fen).toBe(AFTER_E4)
     expect(hasMoves(shown)).toBe(false)
   })
@@ -209,5 +209,25 @@ describe('previews from the coach', () => {
     })
     const replay = reduce(LIVE, { type: 'open-replay', game: record })
     expect(reduce(replay, actionFor({ type: 'show-game' }))).toBe(LIVE)
+  })
+})
+
+describe('the puzzle view', () => {
+  it('shows the puzzle the main process keeps, with nothing to step through or analyse', () => {
+    const view = boardReducer(LIVE, { type: 'show-puzzle' })
+    expect(view).toEqual({ kind: 'puzzle' })
+    const puzzle = puzzleState({ position: position(AFTER_E4) })
+    expect(shownPosition(view, gameState(), puzzle)).toBe(puzzle.position)
+    expect(stepRange(view, 0)).toBeNull()
+    expect(isAnalysable(view)).toBe(false)
+    expect(boardReducer(view, { type: 'go-to', ply: 0, liveMoves: 0 })).toBe(view)
+  })
+
+  it('is where a preview opened on it returns to', () => {
+    const preview = boardReducer(
+      { kind: 'puzzle' },
+      { type: 'open-preview', title: 'idea', start: position(), steps: [] },
+    )
+    expect(boardReducer(preview, { type: 'leave-preview' })).toEqual({ kind: 'puzzle' })
   })
 })

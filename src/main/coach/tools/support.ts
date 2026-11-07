@@ -7,6 +7,8 @@ import type { CoachHub } from '../hub'
 import type { CoachOpponent } from '../opponent'
 import type { CoachSession } from '../session'
 import type { GameService } from '../../games/service'
+import type { LibraryService } from '../../library/service'
+import type { PuzzleService } from '../../puzzles/service'
 
 /** What the tools act on. */
 export interface CoachContext {
@@ -14,7 +16,9 @@ export interface CoachContext {
   session: CoachSession
   analyst: CoachAnalyst
   opponent: CoachOpponent
-  games: Pick<GameService, 'current' | 'newGame' | 'abandon'>
+  games: Pick<GameService, 'current' | 'newGame' | 'abandon' | 'list' | 'record'>
+  library: Pick<LibraryService, 'installed' | 'openingOf'>
+  puzzles: Pick<PuzzleService, 'current' | 'answer' | 'find' | 'start'>
 }
 
 /** An answer, as JSON text. */

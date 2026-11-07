@@ -31,6 +31,19 @@ export const MIGRATIONS: readonly string[] = [
      key    TEXT PRIMARY KEY,
      value  TEXT NOT NULL
    );`,
+
+  `CREATE TABLE puzzle_attempts (
+     id          INTEGER PRIMARY KEY,
+     puzzle_id   TEXT    NOT NULL,
+     rating      INTEGER NOT NULL,
+     themes      TEXT    NOT NULL,
+     started_at  TEXT    NOT NULL,
+     ended_at    TEXT,
+     result      TEXT,
+     mistakes    INTEGER NOT NULL DEFAULT 0,
+     hints       INTEGER NOT NULL DEFAULT 0
+   );
+   CREATE INDEX puzzle_attempts_by_start ON puzzle_attempts (started_at);`,
 ]
 
 /** Opens the database at `path`, or in memory for ':memory:', and brings it up to date. */

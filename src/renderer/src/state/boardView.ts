@@ -3,6 +3,7 @@
 // on the game. All of it is pure, so it is tested without React.
 import type { GameRecord, GameState, LineStep, Position, ShownPosition } from '@shared/chess'
 import type { BoardCommand } from '@shared/coach'
+import type { PuzzleState } from '@shared/training'
 import { otherColor, shownPart, START_FEN } from '@shared/chess'
 import { splitFen, uciSquares } from '@shared/notation'
 
@@ -27,12 +28,15 @@ export type BoardView =
     }
   /** Setting up a position. */
   | { kind: 'editor'; fen: string }
+  /** The puzzle being solved, which the main process keeps, as it does the game. */
+  | { kind: 'puzzle' }
 
 /** Any view but a preview: where a preview returns to. */
 export type BaseView = Exclude<BoardView, { kind: 'preview' }>
 
 export type BoardAction =
   | { type: 'show-live' }
+  | { type: 'show-puzzle' }
   /** Steps to a ply; `liveMoves` is how many moves the live game has, as the view cannot know. */
   | { type: 'go-to'; ply: number; liveMoves: number }
   /** A move chosen from a move list: the position after it, leaving any preview first. */
@@ -55,11 +59,14 @@ export type BoardAction =
   | { type: 'leave-preview' }
 
 export const LIVE: BaseView = { kind: 'live', ply: null }
+const PUZZLE: BaseView = { kind: 'puzzle' }
 
 export function boardReducer(view: BoardView, action: BoardAction): BoardView {
   switch (action.type) {
     case 'show-live':
       return LIVE
+    case 'show-puzzle':
+      return PUZZLE
     case 'go-to':
       return goTo(view, action.ply, action.liveMoves)
     case 'select-move':
@@ -131,9 +138,12 @@ export function baseOf(view: BoardView): BaseView {
   return view.kind === 'preview' ? view.returnTo : view
 }
 
-/** Whether the engine can be asked about what the board shows: not while it moves by itself. */
+/**
+ * Whether the engine can be asked about what the board shows: not while it moves by itself, and
+ * not on a puzzle, where it would give the answer away.
+ */
 export function isAnalysable(view: BoardView): boolean {
-  return view.kind !== 'editor' && view.kind !== 'preview'
+  return view.kind !== 'editor' && view.kind !== 'preview' && view.kind !== 'puzzle'
 }
 
 /** How many moves a view can step through, and which it is on; null if it has none. */
@@ -150,6 +160,7 @@ export function stepRange(
     case 'preview':
       return { ply: view.ply, count: view.steps.length }
     case 'editor':
+    case 'puzzle':
       return null
   }
 }
@@ -168,6 +179,7 @@ function goTo(view: BoardView, ply: number, liveMoves: number): BoardView {
     case 'analysis':
       return { ...view, ply: target }
     case 'editor':
+    case 'puzzle':
       return view
   }
 }
@@ -176,9 +188,13 @@ const START: ShownPosition = { fen: START_FEN, turn: 'white', check: false }
 
 /**
  * The position the board shows, with the moves it allows if anyone may move there. Only the
- * live game's current position and the analysis board allow moves.
+ * live game's current position, the puzzle and the analysis board allow moves.
  */
-export function shownPosition(view: BoardView, game: GameState | null): ShownPosition | Position {
+export function shownPosition(
+  view: BoardView,
+  game: GameState | null,
+  puzzle: PuzzleState | null,
+): ShownPosition | Position {
   switch (view.kind) {
     case 'live':
       if (!game) return START
@@ -192,6 +208,8 @@ export function shownPosition(view: BoardView, game: GameState | null): ShownPos
       return shownPart(view.steps[view.ply - 1]?.position ?? view.start)
     case 'editor':
       return { fen: view.fen, turn: 'white', check: false }
+    case 'puzzle':
+      return puzzle?.position ?? START
   }
 }
 

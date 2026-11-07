@@ -72,5 +72,11 @@ export function useTrainerActions(options: {
     retryOpponent: async () => {
       await attempt(api.game.retryOpponent(), notify)
     },
+
+    /** Asks the coach, in the chat, to go over the game just played. */
+    askForReview: async () => {
+      const sent = await attempt(api.coach.send('Could you review this game with me?'), notify)
+      if (sent) showTab('coach')
+    },
   }
 }

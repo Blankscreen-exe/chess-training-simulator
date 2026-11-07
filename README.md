@@ -12,7 +12,9 @@ you set up, see its best lines with arrows and watch them played out, try moves 
 board, and step back through your games, which are kept on your computer. Claude connects and
 coaches you in the app: it shows your options before a move as numbered arrows, tells you how
 each move went, plays lines out on the board, sets up positions to study, and can play you
-itself, choosing from Stockfish's best moves. Puzzles, openings and reviews come next; see
+itself, choosing from Stockfish's best moves. With the library installed (Training tab), you
+solve puzzles from Lichess, Claude builds lessons from them and shows you openings, and it
+reviews your games. Your profile and spaced repetition of your mistakes come next; see
 [the plan](docs/plan.md).
 
 ## Connecting the coach
@@ -43,7 +45,8 @@ In the Coach tab, choose how closely it coaches:
 | Silent        | Says nothing about the game unless you ask                       |
 
 You can also ask in the chat: "show me a trick with the bishop", "what happens if my rook goes to
-e7?", "let's start another game", "play me yourself". Every chess fact the coach gives comes from
+e7?", "give me a puzzle", "show me a few good openings", "review that game", "let's start
+another game", "play me yourself". Every chess fact the coach gives comes from
 Stockfish, through the app; it never judges a position on its own.
 
 Claude waits for you through a tool call that returns every 40 seconds or so; each return is a
@@ -89,6 +92,8 @@ through one typed contract.
 | `src/main/games`    | A game, its storage in SQLite, and the service that plays it against the engine                                                  |
 | `src/main/engine`   | Stockfish: the UCI protocol, strength levels, and running it in its own process                                                  |
 | `src/main/analysis` | The engine's best lines for a position                                                                                           |
+| `src/main/library`  | The puzzle and openings library: reading Lichess's files, installing them, and finding puzzles and openings                      |
+| `src/main/puzzles`  | A puzzle being solved, and the player's tries at them                                                                            |
 | `src/main/coach`    | The coach's MCP server: who may connect, its tools and instructions, and the chat and events it passes between player and Claude |
 | `src/main/ipc`      | Checking every request from the page against a schema, and answering it                                                          |
 | `src/main/storage`  | The SQLite database, its migrations, and settings                                                                                |

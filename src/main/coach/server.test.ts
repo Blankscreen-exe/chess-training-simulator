@@ -2,6 +2,9 @@
 // with the real game service, coach session and analysis (Stockfish, in this process).
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js'
+import { mkdtempSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { Chess } from 'chess.js'
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import type { BoardCommand } from '@shared/coach'
@@ -11,6 +14,10 @@ import { inProcessTransport } from '../engine/in-process-transport'
 import type { Opponent } from '../games/opponent'
 import { GameService } from '../games/service'
 import { GameStore } from '../games/store'
+import { LibraryService } from '../library/service'
+import { testLibrary } from '../library/test-support'
+import { AttemptStore } from '../puzzles/attempts'
+import { PuzzleService } from '../puzzles/service'
 import { openDatabase } from '../storage/database'
 import { CoachAnalyst } from './analyst'
 import type { CoachHub } from './hub'
@@ -33,15 +40,32 @@ let server: CoachServer
 let hub: CoachHub
 let games: GameService
 let client: Client
+let library: LibraryService
+let puzzles: PuzzleService
 let commands: BoardCommand[] = []
+const folder = mkdtempSync(join(tmpdir(), 'coach-server-'))
 
 beforeAll(async () => {
   hub = testHub({ settings: { mode: 'silent', playerLevel: 'casual' } })
   const analyst = new CoachAnalyst(() => engine)
   const session = new CoachSession(hub, analyst, () => undefined)
   const opponent = new CoachOpponent(hub, analyst, instantOpponent)
+  const db = openDatabase(':memory:')
+  const libraryPath = join(folder, 'library.db')
+  testLibrary(libraryPath).close()
+  library = new LibraryService({
+    path: libraryPath,
+    fetch: () => Promise.reject(new Error('No downloads in tests')),
+  })
+  puzzles = new PuzzleService({
+    library,
+    attempts: new AttemptStore(db),
+    ratings: () => ({ min: 1700, max: 1900 }),
+    replyDelayMs: 0,
+  })
+  puzzles.onChange((state) => session.puzzleChanged(state, puzzles.answer() ?? []))
   games = new GameService({
-    store: new GameStore(openDatabase(':memory:')),
+    store: new GameStore(db),
     opponents: { engine: instantOpponent, coach: opponent },
     minReplyDelayMs: 0,
     log: () => undefined,
@@ -51,7 +75,7 @@ beforeAll(async () => {
   server = await startCoachServer({
     port: 0,
     version: '0.0.0-test',
-    context: { hub, session, analyst, opponent, games },
+    context: { hub, session, analyst, opponent, games, library, puzzles },
     log: () => undefined,
   })
   client = new Client({ name: 'test', version: '0.0.0' })
@@ -62,6 +86,8 @@ afterAll(async () => {
   await client.close()
   await server.close()
   engine.close()
+  library.close()
+  rmSync(folder, { recursive: true, force: true })
 })
 
 beforeEach(() => {
@@ -83,15 +109,20 @@ describe('the coach server', () => {
     const { tools } = await client.listTools()
     expect(tools.map((tool) => tool.name).sort()).toEqual([
       'analyze_position',
+      'check_line',
       'end_game',
+      'find_openings',
+      'find_puzzles',
       'get_game_state',
       'make_move',
       'new_game',
       'play_preview',
+      'review_game',
       'say',
       'set_mode',
       'set_position',
       'show_candidates',
+      'start_puzzle',
       'wait_for_event',
     ])
   })
@@ -100,6 +131,8 @@ describe('the coach server', () => {
     expect(await call('get_game_state')).toEqual({
       coaching: { mode: 'silent', player_level: 'casual' },
       game: null,
+      puzzle: null,
+      library_installed: true,
     })
   })
 
@@ -233,5 +266,102 @@ describe('the coach server', () => {
       },
     })
     expect(response.status).toBe(403)
+  })
+})
+
+describe('training from the library', () => {
+  /** Waits for events until one of `type` comes, and returns it. */
+  async function nextEvent(type: string): Promise<Record<string, unknown>> {
+    for (;;) {
+      const { events } = (await call('wait_for_event')) as { events: Record<string, unknown>[] }
+      const found = events.find((event) => event['type'] === type)
+      if (found) return found
+    }
+  }
+
+  it('finds puzzles to show, with answers play_preview takes as they are', async () => {
+    const found = (await call('find_puzzles', { piece: 'rook', count: 5 })) as {
+      puzzles: { puzzle_id: string; fen: string; answer: string[] }[]
+    }
+    expect(found.puzzles.map((p) => p.puzzle_id)).toEqual(['00008'])
+    const [example] = found.puzzles
+    expect(example?.answer).toEqual(['Rxe7', 'Qb1+', 'Nc1', 'Qxc1+', 'Qxc1'])
+    const preview = { fen: example?.fen, title: 'A rook trick', moves: example?.answer }
+    expect(await call('play_preview', preview)).toHaveProperty('playing')
+    expect(await call('find_puzzles', { theme: 'zugzwang' })).toEqual({
+      refused: 'No puzzle in the library fits that. Try another theme or piece.',
+    })
+  })
+
+  it('puts a puzzle on the board, and tells the coach how the player gets on', async () => {
+    const started = await call('start_puzzle', { puzzle_id: '0000H', title: 'Mates, 1 of 3' })
+    expect(started).toMatchObject({
+      puzzle_id: '0000H',
+      title: 'Mates, 1 of 3',
+      player_color: 'black',
+      opponent_move: '15. Qxh5',
+      answer: '15… Qg2#',
+      moves_to_find: 1,
+      themes: ['Checkmate', 'Mate in 1', 'Middlegame', 'One move'],
+    })
+    expect((await nextEvent('puzzle_started'))['puzzle']).toMatchObject({ puzzle_id: '0000H' })
+    puzzles.move({ from: 'd5', to: 'd4' })
+    expect(await nextEvent('puzzle_move')).toMatchObject({ move: 'Qxd4', right: false })
+    puzzles.move({ from: 'd5', to: 'g2' })
+    expect(await nextEvent('puzzle_ended')).toEqual({
+      type: 'puzzle_ended',
+      result: 'solved',
+      mistakes: 1,
+      hints: 0,
+    })
+    expect(await call('get_game_state')).toMatchObject({ puzzle: { status: 'solved' } })
+  })
+
+  it('finds openings by name and by first moves', async () => {
+    const byName = (await call('find_openings', { name: 'sicilian' })) as {
+      start_fen: string
+      openings: { name: string; line: string; moves: string[] }[]
+    }
+    expect(byName.openings.map((o) => o.name)).toEqual([
+      'Sicilian Defense',
+      'Sicilian Defense: Najdorf Variation',
+    ])
+    expect(byName.openings[0]).toMatchObject({ line: '1. e4 c5', moves: ['e4', 'c5'] })
+    // Shown from the standard start, whatever the game's position.
+    const preview = { fen: byName.start_fen, title: 'Najdorf', moves: byName.openings[1]?.moves }
+    expect(await call('play_preview', preview)).toEqual({
+      playing: '1. e4 c5 2. Nf3 d6 3. d4 cxd4 4. Nxd4 Nf6 5. Nc3 a6',
+    })
+    // Moves may be written in UCI; they are matched in standard notation.
+    const byMoves = (await call('find_openings', { moves: ['e2e4', 'e7e5'] })) as {
+      openings: { name: string }[]
+    }
+    expect(byMoves.openings.map((o) => o.name)).toEqual(['Italian Game'])
+  })
+
+  it('judges each move of a line, and says where it ends', { timeout: 30_000 }, async () => {
+    const checked = (await call('check_line', {
+      fen: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',
+      moves: ['f3', 'e5', 'g4', 'Qh4#'],
+    })) as { line: string; moves: { quality: string; by: string }[]; end_evaluation: string }
+    expect(checked.moves.map((m) => m.by)).toEqual(['white', 'black', 'white', 'black'])
+    expect(checked.moves[2]?.quality).toBe('blunder')
+    expect(checked.line).toMatch(/2\. g4\?\? Qh4#$/)
+    expect(checked.end_evaluation).toBe('checkmate')
+  })
+
+  it("reviews a game, from the player's side", { timeout: 30_000 }, async () => {
+    await call('new_game', { player_color: 'white', opponent: 'engine' })
+    games.move({ from: 'e2', to: 'e4' })
+    await settle()
+    games.move({ from: 'd1', to: 'h5' })
+    await settle()
+    const review = (await call('review_game')) as {
+      annotated_moves: string
+      player_moves: Record<string, number>
+    }
+    expect(review.annotated_moves).toMatch(/^1\. e4 /)
+    expect(Object.values(review.player_moves).reduce((a, b) => a + b)).toBe(2)
+    expect(await call('review_game', { game_id: 999 })).toHaveProperty('refused')
   })
 })

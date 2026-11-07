@@ -1,5 +1,6 @@
 import type { DrawShape } from '@lichess-org/chessground/draw'
 import type { Color, GameState, Score } from '@shared/chess'
+import type { PuzzleState } from '@shared/training'
 import { useBoardMoves } from '../../hooks/useBoardMoves'
 import type { BoardState } from '../../hooks/useBoardView'
 import { previewCaption } from '../../state/boardView'
@@ -16,6 +17,7 @@ const BOARD_SIZE = 'min(100cqw - 1.75rem, 100cqh)'
 export function BoardArea({
   board,
   game,
+  puzzle,
   orientation,
   score,
   arrows,
@@ -24,8 +26,8 @@ export function BoardArea({
 }: {
   board: BoardState
   game: GameState | null
+  puzzle: PuzzleState | null
   orientation: Color
-  /** The engine's view of the position, while it is being shown. */
   /** The engine's view of the position, for the bar beside the board; undefined hides the bar. */
   score: Score | null | undefined
   /** The engine's and the coach's arrows, as one list, kept the same array while unchanged. */
@@ -34,12 +36,12 @@ export function BoardArea({
   notify: (message: string) => void
 }) {
   const { view, dispatch, position, range, goTo } = board
-  const moves = useBoardMoves({ view, position, game, dispatch, notify })
+  const moves = useBoardMoves({ view, position, game, puzzle, dispatch, notify })
   const caption = previewCaption(view)
 
   return (
     <section className="flex min-w-0 flex-1 flex-col gap-3">
-      <BoardBanner view={view} game={game} dispatch={dispatch} />
+      <BoardBanner view={view} game={game} puzzle={puzzle} dispatch={dispatch} />
 
       <div className="relative min-h-0 flex-1" style={{ containerType: 'size' }}>
         <div className="absolute inset-0 flex items-center justify-center">
@@ -77,7 +79,7 @@ export function BoardArea({
               )}
               {notice && (
                 <div
-                  className="absolute inset-x-0 bottom-3 z-30 mx-auto w-fit rounded-md bg-red-900/90 px-3 py-2 text-sm text-red-100 shadow-lg"
+                  className="pointer-events-none absolute inset-x-0 bottom-3 z-30 mx-auto w-fit rounded-md bg-red-900/90 px-3 py-2 text-sm text-red-100 shadow-lg"
                   role="alert"
                 >
                   {notice}

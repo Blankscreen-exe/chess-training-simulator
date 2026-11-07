@@ -30,6 +30,14 @@ Chess Training Simulator is licensed under the GNU General Public License, versi
 
 The pieces are the Cburnett set, which comes with chessground.
 
+## Data downloaded by the app
+
+The training library is not shipped with the app: it is downloaded when the player installs it,
+from Lichess, whose data is in the public domain (CC0):
+
+- Puzzles: the Lichess puzzle database, https://database.lichess.org/#puzzles
+- Openings: lichess-org/chess-openings, https://github.com/lichess-org/chess-openings
+
 ## Used only to build the app
 
 electron-vite, Vite, TypeScript, ESLint, Prettier, Vitest and electron-builder build and test

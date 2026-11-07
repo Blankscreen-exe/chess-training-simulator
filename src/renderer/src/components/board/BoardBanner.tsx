@@ -1,6 +1,9 @@
 import type { Dispatch } from 'react'
 import type { GameState } from '@shared/chess'
 import { numberedMove } from '@shared/notation'
+import type { PuzzleState } from '@shared/training'
+import { api } from '../../lib/api'
+import { puzzleHeading } from '../../lib/puzzle'
 import { describeEnding } from '../../lib/outcome'
 import type { BoardAction, BoardView } from '../../state/boardView'
 import { ViewBanner } from './ViewBanner'
@@ -9,10 +12,12 @@ import { ViewBanner } from './ViewBanner'
 export function BoardBanner({
   view,
   game,
+  puzzle,
   dispatch,
 }: {
   view: BoardView
   game: GameState | null
+  puzzle: PuzzleState | null
   dispatch: Dispatch<BoardAction>
 }) {
   switch (view.kind) {
@@ -71,6 +76,13 @@ export function BoardBanner({
         </ViewBanner>
       )
     }
+    case 'puzzle':
+      return (
+        <ViewBanner tone="puzzle" backLabel="Leave puzzle" onBack={() => void api.puzzle.close()}>
+          <strong className="font-semibold">Puzzle</strong>
+          {puzzle && ` · ${puzzleHeading(puzzle)}`}
+        </ViewBanner>
+      )
     case 'editor':
       return null
   }

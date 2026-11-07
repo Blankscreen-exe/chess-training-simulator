@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import { START_FEN } from '@shared/chess'
+import { puzzleState } from '@test-support/fixtures'
 import { describeEnding, playerOutcome } from './outcome'
-import { loadNewGameChoices } from './preferences'
+import { loadNewGameChoices, loadPuzzleChoices } from './preferences'
+import { puzzleHeading, puzzleProgress, puzzleThemes } from './puzzle'
 import { formatScore, whiteShare } from './score'
 import { scoreSheet } from './scoreSheet'
 
@@ -93,5 +95,44 @@ describe('loadNewGameChoices', () => {
       ...defaults,
       engineLevel: 5,
     })
+  })
+})
+
+describe('loadPuzzleChoices', () => {
+  const storage = (value: string | null) => ({ getItem: () => value })
+
+  it('reads a known theme and piece, and takes anything else as any', () => {
+    expect(loadPuzzleChoices(storage('{"theme":"fork","piece":"knight"}'))).toEqual({
+      theme: 'fork',
+      piece: 'knight',
+    })
+    expect(loadPuzzleChoices(storage('{"theme":"magic","piece":7}'))).toEqual({
+      theme: null,
+      piece: null,
+    })
+    expect(loadPuzzleChoices(storage('[1]'))).toEqual({ theme: null, piece: null })
+  })
+})
+
+describe('puzzle wording', () => {
+  const puzzle = puzzleState
+
+  it('says what to do, and how the player is getting on', () => {
+    expect(puzzleHeading(puzzle({}))).toBe('rated 1819 — find the best move for White')
+    expect(puzzleHeading(puzzle({ title: 'Forks, 1 of 3', status: 'solved' }))).toBe(
+      'Forks, 1 of 3 — solved',
+    )
+    expect(puzzleProgress(puzzle({}))).toBe('White to play and win: the answer is 3 moves long.')
+    expect(puzzleProgress(puzzle({ found: 1 }))).toBe('Right! 1 of 3 moves found. Keep going.')
+    expect(puzzleProgress(puzzle({ found: 1, wrongMove: 'Qg6' }))).toBe('Qg6 is not it. Try again.')
+    expect(puzzleProgress(puzzle({ status: 'solved' }))).toBe('Solved, first time.')
+    expect(puzzleProgress(puzzle({ status: 'solved', mistakes: 2, hints: 1 }))).toBe(
+      'Solved, with 2 wrong tries and 1 hint.',
+    )
+  })
+
+  it('keeps the themes back until the puzzle is over, as they give the idea away', () => {
+    expect(puzzleThemes(puzzle({}))).toEqual([])
+    expect(puzzleThemes(puzzle({ status: 'revealed' }))).toEqual(['Fork', 'Middlegame'])
   })
 })

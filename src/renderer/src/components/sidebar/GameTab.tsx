@@ -1,4 +1,5 @@
 import type { GameState } from '@shared/chess'
+import type { Opening } from '@shared/training'
 import { baseOf, stepRange, type BoardView } from '../../state/boardView'
 import { GamePanel } from './GamePanel'
 import { MoveList } from './MoveList'
@@ -10,20 +11,24 @@ import { MoveList } from './MoveList'
 export function GameTab({
   view,
   game,
+  opening,
   onGo,
   onNewGame,
   onResign,
   onRetryEngine,
   onAnalyse,
+  onReview,
 }: {
   view: BoardView
   game: GameState | null
+  opening: Opening | null
   /** Shows the position after a move picked from the list. */
   onGo: (ply: number) => void
   onNewGame: () => void
   onResign: () => void
   onRetryEngine: () => void
   onAnalyse: () => void
+  onReview: (() => void) | undefined
 }) {
   const base = baseOf(view)
 
@@ -48,12 +53,14 @@ export function GameTab({
   return (
     <GamePanel
       game={game}
+      opening={opening}
       ply={stepRange(base, game?.moves.length ?? 0)?.ply ?? 0}
       onSelectPly={onGo}
       onNewGame={onNewGame}
       onResign={onResign}
       onRetryEngine={onRetryEngine}
       onAnalyse={onAnalyse}
+      onReview={onReview}
     />
   )
 }

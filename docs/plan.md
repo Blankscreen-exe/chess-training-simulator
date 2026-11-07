@@ -66,8 +66,11 @@ and Claude answers with `say`. The Claude Code terminal also works.
 | `set_position`          | Opens an analysis board on a position                                |
 | `new_game` / `end_game` | Starts a game; ends one as finished, resigned or abandoned           |
 | `make_move`             | Only when Claude picks the opponent's move: one of the engine's list |
-| `get_puzzle`            | A puzzle by theme and rating; the app checks the answers             |
-| `get_openings`          | Opening names and lines from the openings database                   |
+| `find_puzzles`          | Puzzles by theme, piece and rating, as examples for a lesson         |
+| `start_puzzle`          | A puzzle on the board; the app checks the answers                    |
+| `find_openings`         | Opening names and lines from the openings database                   |
+| `check_line`            | Stockfish's verdict on each move of a line Claude wants to show      |
+| `review_game`           | Every move of a game marked, and its turning points                  |
 | `get_player_profile`    | The player's level, history and weaknesses                           |
 | `log_weakness`          | Records a mistake pattern for later training                         |
 | `say`                   | Writes in the coach panel                                            |
@@ -109,10 +112,12 @@ picking among Stockfish's best few moves, to make the game more human or to set 
 
 ## Data
 
-- **Puzzles:** the Lichess puzzle database (CC0), with rating and themes. Downloaded on first run and
-  imported into SQLite, as it is too large for the repository.
-- **Openings:** the Lichess `chess-openings` dataset (CC0).
-- **Your data:** games, mistakes and settings, in SQLite under `app.getPath('userData')`.
+- **Puzzles:** the Lichess puzzle database (CC0), with rating and themes. Downloaded when the
+  player installs the library from the Training tab (about 300 MB, once), and the best of it
+  kept in `library.db`, as it is too large for the repository.
+- **Openings:** the Lichess `chess-openings` dataset (CC0), installed with the puzzles.
+- **Your data:** games, puzzle tries and settings, in `games.db` under `app.getPath('userData')`,
+  apart from the library, which can be replaced without touching them.
 
 ## Platforms and licence
 
@@ -162,12 +167,21 @@ picking among Stockfish's best few moves, to make the game more human or to set 
 - Settings kept in the database: coaching mode and the player's level; the new-game dialog
   remembers side, strength and opponent
 
-### 4. Training content
+### 4. Training content (done)
 
-- Download and import of the puzzle and openings databases
-- `get_puzzle`, `get_openings`
-- Lessons from puzzles by theme and piece; Stockfish checks any position Claude makes up
-- Review after a game
+- The library: Lichess's puzzles and openings, installed from the Training tab into a database
+  of their own. The puzzle file is streamed, never saved: its zstd frames are read as they
+  arrive (skipping pzstd's skippable frames, which Node's decompressor cannot), and the best
+  puzzles kept, up to 10,000 in each band of 100 rating points: about 212,000 from the 2026 file, in a 39 MB
+  library, installed in about seven minutes
+- Puzzles on the board, from the Training tab or the coach: the app checks each move (any mate
+  counts), plays the replies, gives hints and the answer, and notes every try, so puzzles do not
+  come round again soon
+- `find_puzzles`, `start_puzzle`, `find_openings`; lessons are real puzzles by theme or by the
+  piece that wins
+- `check_line`: Stockfish judges every move of a line Claude makes up before it is shown
+- `review_game`: every move marked, and the turning points; a Review button once a game ends
+- The game's opening, by name, in the Game tab and for the coach
 
 ### 5. The player's profile
 

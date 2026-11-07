@@ -1,5 +1,6 @@
 export const SIDEBAR_TABS = [
   { id: 'game', label: 'Game' },
+  { id: 'training', label: 'Training' },
   { id: 'analysis', label: 'Analysis' },
   { id: 'history', label: 'History' },
   { id: 'coach', label: 'Coach' },

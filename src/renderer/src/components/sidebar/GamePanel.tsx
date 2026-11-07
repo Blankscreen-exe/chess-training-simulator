@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import type { GameState } from '@shared/chess'
+import type { Opening } from '@shared/training'
 import { opponentName } from '../../lib/opponent'
 import { describeEnding } from '../../lib/outcome'
 import { Button } from '../ui/Button'
@@ -24,20 +25,25 @@ function statusOf(game: GameState): { text: string; tone: string } {
 /** The game being played: whose move it is, its moves, and what can be done with it. */
 export function GamePanel({
   game,
+  opening,
   ply,
   onSelectPly,
   onNewGame,
   onResign,
   onRetryEngine,
   onAnalyse,
+  onReview,
 }: {
   game: GameState | null
+  opening: Opening | null
   ply: number
   onSelectPly: (ply: number) => void
   onNewGame: () => void
   onResign: () => void
   onRetryEngine: () => void
   onAnalyse: () => void
+  /** Asks the coach to go over the game; absent while the coach is not connected. */
+  onReview: (() => void) | undefined
 }) {
   const [confirmingResign, setConfirmingResign] = useState(false)
 
@@ -61,6 +67,11 @@ export function GamePanel({
         <p className="text-xs text-stone-500">
           You play {game.playerColor === 'white' ? 'White' : 'Black'} against {opponentName(game)}
         </p>
+        {opening && (
+          <p className="truncate text-xs text-stone-400" title={opening.name}>
+            {opening.eco} · {opening.name}
+          </p>
+        )}
         <p className={`text-sm font-medium ${status.tone}`} aria-live="polite">
           {status.text}
         </p>
@@ -80,6 +91,7 @@ export function GamePanel({
         <Button variant="primary" onClick={onNewGame}>
           New game
         </Button>
+        {over && onReview && <Button onClick={onReview}>Review with the coach</Button>}
         {!over &&
           (confirmingResign ? (
             <>

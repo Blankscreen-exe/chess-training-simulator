@@ -91,3 +91,21 @@ export function numberedLine(fen: string, san: readonly string[]): string {
     )
     .join(' ')
 }
+
+/** The piece on a square, as its FEN letter ('N' a white knight, 'p' a black pawn); null if none. */
+export function pieceLetterAt(placement: string, square: string): string | null {
+  const file = square.charCodeAt(0) - 97
+  const rank = placement.split('/')[8 - Number(square[1])]
+  if (rank === undefined || file < 0 || file > 7) return null
+  let column = 0
+  for (const letter of rank) {
+    const empty = Number(letter)
+    if (empty) {
+      column += empty
+      if (column > file) return null
+    } else if (column++ === file) {
+      return letter
+    }
+  }
+  return null
+}

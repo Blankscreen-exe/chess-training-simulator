@@ -1,11 +1,20 @@
-// What the coach hears about the game, by coaching mode. It follows every change to the game, and
-// passes on to Claude the events the mode calls for, with the engine's view added where the mode
-// needs it. Events go out in the order things happened, even when some take a moment to analyse.
+// What the coach hears about the game, by coaching mode, and about puzzles. It follows every
+// change to the game, and passes on to Claude the events the mode calls for, with the engine's
+// view added where the mode needs it. Events go out in the order things happened, even when
+// some take a moment to analyse.
 import type { GameState } from '@shared/chess'
 import type { CoachingMode } from '@shared/coach'
+import type { PuzzleState } from '@shared/training'
 import type { PositionAnalyst } from './analyst'
-import { candidateMoves, gameEvents, type CandidateMove, type MoveEvent } from './events'
+import {
+  candidateMoves,
+  gameEvents,
+  puzzleEvents,
+  type CandidateMove,
+  type MoveEvent,
+} from './events'
 import type { CoachHub } from './hub'
+import { puzzleSnapshotOf } from './snapshot'
 
 /** How many options the coach is shown before the player's move. */
 export const CANDIDATE_COUNT = 3
@@ -28,6 +37,7 @@ export const MODE_RULES: Record<CoachingMode, ModeRules> = {
 
 export class CoachSession {
   private last: GameState | null = null
+  private lastPuzzle: PuzzleState | null = null
   /** The position whose options were last offered, so they are offered once. */
   private offeredFen: string | null = null
   private work: Promise<void> = Promise.resolve()
@@ -64,6 +74,18 @@ export class CoachSession {
       }
     }
     if (rules.candidates) this.offerCandidates(next)
+  }
+
+  /**
+   * Passes on what happens in puzzles, whatever the mode: the player is solving them to learn,
+   * and the coach decides by its instructions how much to say. `answer` is the puzzle's answer.
+   */
+  puzzleChanged(next: PuzzleState | null, answer: readonly string[]): void {
+    const events = puzzleEvents(this.lastPuzzle, next, (puzzle) => puzzleSnapshotOf(puzzle, answer))
+    this.lastPuzzle = next
+    if (events.length === 0) return
+    this.hub.noteActivity()
+    if (this.hub.connected) this.later(() => this.hub.deliver(events))
   }
 
   private passPlayerMove(event: MoveEvent, game: GameState, rules: ModeRules): void {

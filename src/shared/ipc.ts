@@ -16,6 +16,7 @@ import type {
   Result,
 } from './chess'
 import type { BoardCommand, ChatMessage, CoachSettings, CoachState } from './coach'
+import type { LibraryState, Opening, PuzzleRequest, PuzzleState } from './training'
 
 /** The app's name, version and the versions of what it runs on. */
 export interface AppInfo {
@@ -31,6 +32,7 @@ export interface AppInfo {
 }
 
 type GameChange = Result<{ state: GameState }>
+type PuzzleChange = Result<{ state: PuzzleState }>
 
 /** Every request the renderer can make: its arguments and what it is answered with. */
 export interface IpcContract {
@@ -56,6 +58,18 @@ export interface IpcContract {
   'coach:get': { args: []; result: CoachState }
   'coach:send': { args: [text: string]; result: Result<{ message: ChatMessage }> }
   'coach:set-settings': { args: [change: Partial<CoachSettings>]; result: CoachState }
+  'library:get': { args: []; result: LibraryState }
+  'library:install': { args: []; result: Result<{ state: LibraryState }> }
+  'library:cancel': { args: []; result: LibraryState }
+  /** The named opening a game is in, from every position in it as FEN, its start first. */
+  'opening:of': { args: [positions: string[]]; result: Opening | null }
+  'puzzle:get': { args: []; result: PuzzleState | null }
+  'puzzle:start': { args: [request: PuzzleRequest]; result: PuzzleChange }
+  /** Refused, with the reason, for a move that is not the answer; the try is still counted. */
+  'puzzle:move': { args: [move: MoveInput]; result: PuzzleChange }
+  'puzzle:hint': { args: []; result: PuzzleChange }
+  'puzzle:reveal': { args: []; result: PuzzleChange }
+  'puzzle:close': { args: []; result: null }
 }
 
 export type IpcChannel = keyof IpcContract
@@ -68,6 +82,8 @@ export interface IpcEvents {
   'coach:state': CoachState
   /** Something the coach asks the board to do, once. */
   'coach:board': BoardCommand
+  'library:state': LibraryState
+  'puzzle:state': PuzzleState | null
 }
 
 export type IpcEvent = keyof IpcEvents
@@ -93,6 +109,16 @@ export const API_CHANNELS = {
   line: { resolve: 'line:resolve' },
   analysis: { run: 'analysis:run' },
   coach: { get: 'coach:get', send: 'coach:send', setSettings: 'coach:set-settings' },
+  library: { get: 'library:get', install: 'library:install', cancel: 'library:cancel' },
+  opening: { of: 'opening:of' },
+  puzzle: {
+    get: 'puzzle:get',
+    start: 'puzzle:start',
+    move: 'puzzle:move',
+    hint: 'puzzle:hint',
+    reveal: 'puzzle:reveal',
+    close: 'puzzle:close',
+  },
 } as const satisfies ApiTree
 
 export type ApiOf<T> = {

@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import { gameState, playedMoves } from '@test-support/fixtures'
-import { candidateMoves, gameEvents } from './events'
+import { PUZZLE_ROWS, puzzlesOf } from '../library/test-support'
+import { Puzzle } from '../puzzles/puzzle'
+import { candidateMoves, gameEvents, puzzleEvents } from './events'
+import { puzzleSnapshotOf } from './snapshot'
 
 const [e4, e5] = playedMoves(['e4', 'e5'])
 
@@ -53,5 +56,42 @@ describe('candidateMoves', () => {
       { move: 'e4', evaluation: '+0.31, White is better' },
       { move: 'f3', evaluation: 'mate in 2 for Black' },
     ])
+  })
+})
+
+describe('puzzleEvents', () => {
+  const [source] = puzzlesOf([PUZZLE_ROWS.rookWins])
+  const snapshot = (state: Parameters<typeof puzzleSnapshotOf>[0]) => puzzleSnapshotOf(state, [])
+  const start = () => {
+    const started = source && Puzzle.start(source)
+    if (!started?.ok) throw new Error('fixture')
+    return started.puzzle
+  }
+
+  it('tells of a right move, then of the end when the answer is shown', () => {
+    const puzzle = start()
+    const before = puzzle.state()
+    puzzle.tryMove({ from: 'e6', to: 'e7' })
+    const after = puzzle.state()
+    expect(puzzleEvents(before, after, snapshot)).toEqual([
+      { type: 'puzzle_move', move: 'Rxe7', right: true, moves_found: 1, moves_to_find: 3 },
+    ])
+    puzzle.reveal()
+    expect(puzzleEvents(after, puzzle.state(), snapshot)).toEqual([
+      { type: 'puzzle_ended', result: 'revealed', mistakes: 0, hints: 0 },
+    ])
+  })
+
+  it('counts a puzzle replaced or closed while being solved as left', () => {
+    const first = start().state()
+    const second = { ...start().state(), id: 'other' }
+    expect(puzzleEvents(first, second, snapshot).map((event) => event.type)).toEqual([
+      'puzzle_ended',
+      'puzzle_started',
+    ])
+    expect(puzzleEvents(first, null, snapshot)).toEqual([
+      { type: 'puzzle_ended', result: 'left', mistakes: 0, hints: 0 },
+    ])
+    expect(puzzleEvents(null, null, snapshot)).toEqual([])
   })
 })

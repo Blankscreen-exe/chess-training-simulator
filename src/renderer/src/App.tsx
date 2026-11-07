@@ -9,26 +9,33 @@ import { GameTab } from './components/sidebar/GameTab'
 import { HistoryPanel } from './components/sidebar/HistoryPanel'
 import { Sidebar } from './components/sidebar/Sidebar'
 import type { SidebarTab } from './components/sidebar/tabs'
+import { TrainingPanel } from './components/training/TrainingPanel'
 import { Button } from './components/ui/Button'
 import { DEFAULT_ANALYSIS_SETTINGS, useAnalysis } from './hooks/useAnalysis'
 import { useBoardView } from './hooks/useBoardView'
 import { useCoach } from './hooks/useCoach'
 import { useCoachCommands } from './hooks/useCoachCommands'
+import { useLibrary } from './hooks/useLibrary'
 import { useLiveGame } from './hooks/useLiveGame'
 import { useMoveKeys } from './hooks/useMoveKeys'
 import { useNotice } from './hooks/useNotice'
+import { useOpening } from './hooks/useOpening'
 import { useOrientation } from './hooks/useOrientation'
+import { usePuzzle } from './hooks/usePuzzle'
 import { useTrainerActions } from './hooks/useTrainerActions'
 import { useUnread } from './hooks/useUnread'
-import { candidateArrows, lineArrows } from './lib/chessground'
+import { candidateArrows, hintCircle, lineArrows } from './lib/chessground'
 import { isAnalysable } from './state/boardView'
 
 export function App() {
   const game = useLiveGame()
+  const puzzle = usePuzzle()
+  const library = useLibrary()
   const coach = useCoach()
-  const board = useBoardView(game)
+  const board = useBoardView(game, puzzle)
   const { view, dispatch, position } = board
-  const { orientation, setOrientation, flip } = useOrientation(game)
+  const { orientation, setOrientation, flip } = useOrientation(game, puzzle)
+  const opening = useOpening(game, library?.contents?.installedAt ?? null)
   const { notice, notify } = useNotice()
   const [tab, setTab] = useState<SidebarTab>('game')
   /** The new game dialog, when open, with the position it starts from if not the standard one. */
@@ -45,12 +52,14 @@ export function App() {
   const score = analysing ? (analysis?.lines[0]?.score ?? null) : undefined
   // The coach's arrows show only on the position it drew them for.
   const coachCandidates = coach?.candidates?.fen === position.fen ? coach.candidates.moves : null
+  const hint = view.kind === 'puzzle' ? (puzzle?.hint ?? null) : null
   const arrows = useMemo(
     () => [
       ...(analysing && analysis ? lineArrows(analysis.lines) : []),
       ...(coachCandidates ? candidateArrows(coachCandidates) : []),
+      ...(hint ? [hintCircle(hint)] : []),
     ],
-    [analysing, analysis, coachCandidates],
+    [analysing, analysis, coachCandidates, hint],
   )
   useCoachCommands(dispatch)
 
@@ -118,6 +127,7 @@ export function App() {
         <BoardArea
           board={board}
           game={game}
+          puzzle={puzzle}
           orientation={orientation}
           score={score}
           arrows={arrows}
@@ -129,11 +139,23 @@ export function App() {
             <GameTab
               view={view}
               game={game}
+              opening={opening}
               onGo={board.selectMove}
               onNewGame={() => setNewGame({})}
               onResign={() => void actions.resign()}
               onRetryEngine={() => void actions.retryOpponent()}
               onAnalyse={() => void actions.analyseShown()}
+              onReview={
+                coach?.status === 'connected' ? () => void actions.askForReview() : undefined
+              }
+            />
+          )}
+          {tab === 'training' && (
+            <TrainingPanel
+              library={library}
+              puzzle={puzzle}
+              puzzleOnBoard={view.kind === 'puzzle'}
+              onShowPuzzle={() => dispatch({ type: 'show-puzzle' })}
             />
           )}
           {tab === 'analysis' && (

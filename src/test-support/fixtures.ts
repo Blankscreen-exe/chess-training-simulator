@@ -3,6 +3,7 @@
 import { Chess } from 'chess.js'
 import type { GameState, PlayedMove, Position } from '@shared/chess'
 import { START_FEN } from '@shared/chess'
+import type { PuzzleState } from '@shared/training'
 
 /** The moves `san`, played from `fen`, as a game records them. */
 export function playedMoves(san: readonly string[], fen = START_FEN): PlayedMove[] {
@@ -48,6 +49,28 @@ export function gameState(overrides: Partial<GameState> = {}): GameState {
     position: position(moves.at(-1)?.fenAfter ?? initialFen),
     opponentThinking: false,
     opponentFailed: false,
+    ...overrides,
+  }
+}
+
+/** A puzzle being solved, from the start position unless told otherwise. */
+export function puzzleState(overrides: Partial<PuzzleState> = {}): PuzzleState {
+  return {
+    id: '00008',
+    rating: 1819,
+    themes: ['fork', 'middlegame'],
+    title: null,
+    playerColor: 'white',
+    initialFen: START_FEN,
+    moves: [],
+    position: position(START_FEN),
+    status: 'solving',
+    solutionLength: 3,
+    found: 0,
+    mistakes: 0,
+    wrongMove: null,
+    hint: null,
+    hints: 0,
     ...overrides,
   }
 }

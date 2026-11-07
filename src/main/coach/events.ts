@@ -2,9 +2,11 @@
 // them in JSON. Which of these it hears depends on the coaching mode (session.ts).
 import type { AnalysisLine, Color, GameState, GameSummary } from '@shared/chess'
 import type { CoachingMode } from '@shared/coach'
+import type { PuzzleResult, PuzzleState } from '@shared/training'
 import { engineLevelName } from '@shared/engine-levels'
 import { numberedMove } from '@shared/notation'
 import { describeScore, type MoveAssessment } from '../analysis/evaluation'
+import type { PuzzleSnapshot } from './snapshot'
 
 /** A move worth considering, with the engine's view of where it leads. */
 export interface CandidateMove {
@@ -52,6 +54,17 @@ export type CoachEvent =
   | { type: 'opponent_to_move'; fen: string; candidates: CandidateMove[] }
   /** The player changed the coaching mode in the app. */
   | { type: 'mode_changed'; mode: CoachingMode }
+  /** A puzzle is on the board, chosen by the player or by you. */
+  | { type: 'puzzle_started'; puzzle: PuzzleSnapshot }
+  /** The player tried a move in the puzzle; a wrong one is not played, and they try again. */
+  | {
+      type: 'puzzle_move'
+      move: string
+      right: boolean
+      moves_found: number
+      moves_to_find: number
+    }
+  | { type: 'puzzle_ended'; result: PuzzleResult; mistakes: number; hints: number }
 
 export type MoveEvent = Extract<CoachEvent, { type: 'move' }>
 
@@ -86,5 +99,46 @@ export function gameEvents(previous: GameState | null, next: GameState | null): 
   if (previous.status === 'in_progress' && next.status !== 'in_progress') {
     events.push({ type: 'game_ended', result: next.result, termination: next.termination ?? null })
   }
+  return events
+}
+
+/**
+ * The events between two states of the puzzle on the board, oldest first. `snapshot` describes a
+ * puzzle as it starts.
+ */
+export function puzzleEvents(
+  previous: PuzzleState | null,
+  next: PuzzleState | null,
+  snapshot: (puzzle: PuzzleState) => PuzzleSnapshot,
+): CoachEvent[] {
+  const ended = (puzzle: PuzzleState, result: PuzzleResult): CoachEvent => ({
+    type: 'puzzle_ended',
+    result,
+    mistakes: puzzle.mistakes,
+    hints: puzzle.hints,
+  })
+  if (previous?.id !== next?.id) {
+    return [
+      ...(previous?.status === 'solving' ? [ended(previous, 'left')] : []),
+      ...(next ? [{ type: 'puzzle_started', puzzle: snapshot(next) } as const] : []),
+    ]
+  }
+  if (!previous || !next) return []
+
+  const events: CoachEvent[] = []
+  const tried = (move: string, right: boolean): CoachEvent => ({
+    type: 'puzzle_move',
+    move,
+    right,
+    moves_found: next.found,
+    moves_to_find: next.solutionLength,
+  })
+  if (next.mistakes > previous.mistakes && next.wrongMove) events.push(tried(next.wrongMove, false))
+  if (next.found > previous.found) {
+    const found = next.moves.findLast((move) => move.color === next.playerColor)
+    if (found) events.push(tried(found.san, true))
+  }
+  if (previous.status === 'solving' && next.status !== 'solving')
+    events.push(ended(next, next.status))
   return events
 }

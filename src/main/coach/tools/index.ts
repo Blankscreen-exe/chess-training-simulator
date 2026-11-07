@@ -5,6 +5,7 @@ import { registerBoardTools } from './board'
 import { registerConversationTools } from './conversation'
 import { registerGameTools } from './game'
 import type { CoachContext } from './support'
+import { registerTrainingTools } from './training'
 
 export type { CoachContext }
 
@@ -12,4 +13,5 @@ export function registerCoachTools(server: McpServer, context: CoachContext): vo
   registerConversationTools(server, context)
   registerGameTools(server, context)
   registerBoardTools(server, context)
+  registerTrainingTools(server, context)
 }

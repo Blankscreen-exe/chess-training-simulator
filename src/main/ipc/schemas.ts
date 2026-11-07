@@ -7,6 +7,7 @@ import { COACHING_MODES, MAX_CHAT_LENGTH, PLAYER_LEVELS } from '@shared/coach'
 import { ENGINE_LEVEL_IDS } from '@shared/engine-levels'
 import type { IpcArgs, IpcChannel } from '@shared/ipc'
 import { SQUARE_PATTERN, UCI_MOVE_PATTERN } from '@shared/notation'
+import { PUZZLE_PIECES } from '@shared/training'
 
 /** Long enough for any FEN, short enough to refuse anything absurd. */
 const MAX_FEN_LENGTH = 120
@@ -21,6 +22,11 @@ const moveInput = z.strictObject({
   promotion: z.enum(PROMOTION_PIECES).exactOptional(),
 })
 const none = z.tuple([])
+/** A Lichess puzzle theme's name, as "mateIn2". */
+const theme = z.string().regex(/^[a-zA-Z0-9]{1,40}$/)
+const rating = z.number().int().min(0).max(4000)
+/** More positions than any game has, fewer than would strain the main process. */
+const MAX_GAME_POSITIONS = 1000
 
 export const ARGUMENTS: { [C in IpcChannel]: z.ZodType<IpcArgs<C>> } = {
   'app:get-info': none,
@@ -53,4 +59,20 @@ export const ARGUMENTS: { [C in IpcChannel]: z.ZodType<IpcArgs<C>> } = {
       playerLevel: z.enum(PLAYER_LEVELS).exactOptional(),
     }),
   ]),
+  'library:get': none,
+  'library:install': none,
+  'library:cancel': none,
+  'opening:of': z.tuple([z.array(fen).max(MAX_GAME_POSITIONS)]),
+  'puzzle:get': none,
+  'puzzle:start': z.tuple([
+    z.strictObject({
+      theme: theme.exactOptional(),
+      piece: z.enum(PUZZLE_PIECES).exactOptional(),
+      rating: z.strictObject({ min: rating, max: rating }).exactOptional(),
+    }),
+  ]),
+  'puzzle:move': z.tuple([moveInput]),
+  'puzzle:hint': none,
+  'puzzle:reveal': none,
+  'puzzle:close': none,
 }

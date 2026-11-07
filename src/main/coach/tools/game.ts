@@ -5,26 +5,29 @@ import { z } from 'zod'
 import { OPPONENTS, SIDE_CHOICES } from '@shared/chess'
 import { COACHING_MODES } from '@shared/coach'
 import { DEFAULT_ENGINE_LEVEL, ENGINE_LEVEL_IDS } from '@shared/engine-levels'
-import { snapshotOf } from '../snapshot'
+import { puzzleSnapshotOf, snapshotOf } from '../snapshot'
 import { answer, refuse, registrarFor, reply, type CoachContext } from './support'
 
 export function registerGameTools(server: McpServer, context: CoachContext): void {
-  const { hub, games, opponent } = context
+  const { hub, games, opponent, library, puzzles } = context
   const register = registrarFor(server, hub)
 
   register(
     'get_game_state',
     {
       description:
-        "The game being played (whose move it is, the moves so far, the position as FEN, how it stands) and the coaching settings (mode, the player's level). Use it for every fact about the game.",
+        "The game being played (whose move it is, the moves so far, the position as FEN, how it stands, its opening), any puzzle on the board, whether the puzzle and openings library is installed, and the coaching settings (mode, the player's level). Use it for every fact about the game.",
       annotations: { readOnlyHint: true },
     },
     () => {
       const game = games.current()
       const { mode, playerLevel } = hub.currentSettings
+      const puzzle = puzzles.current()
       return reply({
         coaching: { mode, player_level: playerLevel },
-        game: game ? snapshotOf(game) : null,
+        game: game ? snapshotOf(game, library.openingOf(game)) : null,
+        puzzle: puzzle ? puzzleSnapshotOf(puzzle, puzzles.answer() ?? []) : null,
+        library_installed: library.installed !== null,
       })
     },
   )
@@ -57,7 +60,7 @@ export function registerGameTools(server: McpServer, context: CoachContext): voi
       })
       if (!started.ok) return refuse(started.error)
       hub.command({ type: 'show-game' })
-      return reply(snapshotOf(started.state))
+      return reply(snapshotOf(started.state, library.openingOf(started.state)))
     },
   )
 

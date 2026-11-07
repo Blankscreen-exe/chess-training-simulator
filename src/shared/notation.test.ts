@@ -1,6 +1,15 @@
 import { describe, expect, it } from 'vitest'
 import { START_FEN } from './chess'
-import { joinFen, moveAt, numberedLine, parseUci, splitFen, toUci, uciSquares } from './notation'
+import {
+  joinFen,
+  moveAt,
+  numberedLine,
+  parseUci,
+  pieceLetterAt,
+  splitFen,
+  toUci,
+  uciSquares,
+} from './notation'
 
 describe('parseUci', () => {
   it('reads moves and promotions', () => {
@@ -60,5 +69,23 @@ describe('numberedLine', () => {
     expect(numberedLine(START_FEN, ['e4', 'e5', 'Nf3'])).toBe('1. e4 e5 2. Nf3')
     expect(numberedLine('4k3/8/8/8/8/8/4P3/4K3 b - - 0 12', ['Kd7', 'e4'])).toBe('12… Kd7 13. e4')
     expect(numberedLine(START_FEN, [])).toBe('')
+  })
+})
+
+describe('pieceLetterAt', () => {
+  const placement = splitFen(
+    'r1bqkbnr/pppp1ppp/2n5/4p3/2B1P3/5N2/PPPP1PPP/RNBQK2R b KQkq - 3 3',
+  ).placement
+
+  it('reads the piece on a square', () => {
+    expect(pieceLetterAt(placement, 'c4')).toBe('B')
+    expect(pieceLetterAt(placement, 'c6')).toBe('n')
+    expect(pieceLetterAt(placement, 'a8')).toBe('r')
+    expect(pieceLetterAt(placement, 'h1')).toBe('R')
+  })
+
+  it('finds nothing on an empty square', () => {
+    expect(pieceLetterAt(placement, 'd5')).toBeNull()
+    expect(pieceLetterAt(placement, 'g1')).toBeNull()
   })
 })

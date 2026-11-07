@@ -44,3 +44,8 @@ export function candidateArrows(candidates: readonly Candidate[]): DrawShape[] {
     }
   })
 }
+
+/** A circle on the square of the piece a puzzle's hint points at. */
+export function hintCircle(square: string): DrawShape {
+  return { orig: toKey(square), brush: 'green' }
+}

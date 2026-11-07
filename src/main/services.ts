@@ -1,7 +1,7 @@
 // Builds what the app runs on, answers the page's requests with it, and tells the page when
 // things change.
 import { join } from 'node:path'
-import { app } from 'electron'
+import { app, net } from 'electron'
 import { z } from 'zod'
 import {
   COACHING_MODES,
@@ -10,6 +10,7 @@ import {
   PLAYER_LEVELS,
 } from '@shared/coach'
 import type { IpcEvent, IpcEvents } from '@shared/ipc'
+import { PUZZLE_RATINGS } from '@shared/training'
 import { AnalysisService } from './analysis/service'
 import { appInfo } from './app-info'
 import { describeFen, playMove, resolveLine } from './chess/rules'
@@ -24,10 +25,14 @@ import { utilityTransport } from './engine/utility-transport'
 import { GameService } from './games/service'
 import { GameStore } from './games/store'
 import type { IpcHandlers } from './ipc/register'
+import { LibraryService } from './library/service'
+import { AttemptStore } from './puzzles/attempts'
+import { PuzzleService } from './puzzles/service'
 import { openDatabase } from './storage/database'
 import { SettingsStore } from './storage/settings'
 
 const DATABASE_FILE = 'games.db'
+const LIBRARY_FILE = 'library.db'
 /** How often the coach's connection is re-checked, as it lapses with time alone. */
 const COACH_CHECK_MS = 5_000
 const COACH_SETTINGS_KEY = 'coach'
@@ -79,11 +84,27 @@ export function startServices(broadcast: Broadcast): Services {
     log,
   })
   const analysis = new AnalysisService(() => panelEngine.get())
+  const library = new LibraryService({
+    path: join(app.getPath('userData'), LIBRARY_FILE),
+    // Electron's own fetch, which goes through the system's proxy settings.
+    fetch: (url, init) => net.fetch(url, init),
+    log,
+  })
+  const puzzles = new PuzzleService({
+    library,
+    attempts: new AttemptStore(db),
+    ratings: () => PUZZLE_RATINGS[coach.currentSettings.playerLevel],
+  })
 
   games.onChange((state) => {
     session.gameChanged(state)
     broadcast('game:state', state)
   })
+  puzzles.onChange((state) => {
+    session.puzzleChanged(state, puzzles.answer() ?? [])
+    broadcast('puzzle:state', state)
+  })
+  library.onChange((state) => broadcast('library:state', state))
   coach.onChange((state) => broadcast('coach:state', state))
   coach.onBoardCommand((command) => broadcast('coach:board', command))
   const coachCheck = setInterval(() => coach.refresh(), COACH_CHECK_MS)
@@ -92,7 +113,7 @@ export function startServices(broadcast: Broadcast): Services {
   startCoachServer({
     port: coachPort(),
     version: app.getVersion(),
-    context: { hub: coach, session, analyst, opponent: coachOpponent, games },
+    context: { hub: coach, session, analyst, opponent: coachOpponent, games, library, puzzles },
     log,
   }).then(
     (server) => {
@@ -128,6 +149,19 @@ export function startServices(broadcast: Broadcast): Services {
       coach.updateSettings(change, 'player')
       return coach.state()
     },
+    'library:get': () => library.state(),
+    'library:install': () => library.startInstall(),
+    'library:cancel': () => library.cancelInstall(),
+    'opening:of': (positions) => library.openingAt(positions),
+    'puzzle:get': () => puzzles.current(),
+    'puzzle:start': (request) => puzzles.start(request),
+    'puzzle:move': (move) => puzzles.move(move),
+    'puzzle:hint': () => puzzles.hint(),
+    'puzzle:reveal': () => puzzles.reveal(),
+    'puzzle:close': () => {
+      puzzles.close()
+      return null
+    },
   }
 
   return {
@@ -139,6 +173,9 @@ export function startServices(broadcast: Broadcast): Services {
       opponentEngine.close()
       panelEngine.close()
       coachEngine.close()
+      // A puzzle still being solved is noted as left.
+      puzzles.close()
+      library.close()
       db.close()
     },
   }
