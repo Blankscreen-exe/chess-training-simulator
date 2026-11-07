@@ -1,0 +1,16 @@
+@import 'tailwindcss';
+
+@theme {
+  --color-board-light: #eeeed2;
+  --color-board-dark: #769656;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  @apply bg-stone-950 text-stone-100 antialiased select-none;
+}

@@ -1,0 +1,38 @@
+appId: io.github.blankscreen-exe.chess-training-simulator
+productName: Chess Training Simulator
+copyright: Copyright © 2026 Blankscreen-exe
+
+directories:
+  output: release
+  buildResources: build
+
+# Only the built app, its package file and the licences go into the package.
+files:
+  - out/**/*
+  - package.json
+extraFiles:
+  - from: LICENSE
+    to: LICENSE.txt
+  - from: THIRD_PARTY_NOTICES.md
+    to: THIRD_PARTY_NOTICES.md
+
+asar: true
+
+win:
+  target:
+    - nsis
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  license: LICENSE
+
+mac:
+  category: public.app-category.games
+  target:
+    - dmg
+
+linux:
+  category: Game
+  target:
+    - AppImage
+    - deb

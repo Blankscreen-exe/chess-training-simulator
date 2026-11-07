@@ -1,0 +1,7 @@
+# Packages allowed to run install scripts (pnpm blocks them by default).
+# - electron: the published package has no install script any more (it downloads its binary the
+#   first time it runs), but pnpm still asks, so the answer is no.
+# - electron-winstaller makes Squirrel installers; the Windows build makes an NSIS installer.
+allowBuilds:
+  electron: false
+  electron-winstaller: false
