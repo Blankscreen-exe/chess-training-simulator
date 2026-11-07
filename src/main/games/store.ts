@@ -1,34 +1,10 @@
-// Games, kept in SQLite through Node's own driver, so the app needs no native modules.
-import { DatabaseSync } from 'node:sqlite'
+// Games, kept in the app's database.
+import type { DatabaseSync } from 'node:sqlite'
 import { z } from 'zod'
 import type { GameSummary } from '@shared/chess'
-import { COLORS, GAME_RESULTS, GAME_STATUSES, TERMINATIONS } from '@shared/chess'
+import { COLORS, GAME_RESULTS, GAME_STATUSES, OPPONENTS, TERMINATIONS } from '@shared/chess'
 import { ENGINE_LEVEL_IDS } from '@shared/engine-levels'
 import { summaryOf, type StoredGame } from './game'
-
-/**
- * Each step brings the database from the version before it to its own. Once released, a step is
- * never edited: changes are new steps.
- *
- * Statuses, results, terminations and engine levels are lists the app may extend, and SQLite
- * cannot change a CHECK constraint without rebuilding the table, so those are checked as rows
- * are read (GameRow below) rather than by the database.
- */
-const MIGRATIONS: readonly string[] = [
-  `CREATE TABLE games (
-     id            INTEGER PRIMARY KEY,
-     started_at    TEXT    NOT NULL,
-     ended_at      TEXT,
-     player_color  TEXT    NOT NULL CHECK (player_color IN ('white', 'black')),
-     engine_level  INTEGER NOT NULL,
-     initial_fen   TEXT    NOT NULL,
-     moves         TEXT    NOT NULL DEFAULT '',
-     status        TEXT    NOT NULL,
-     result        TEXT    NOT NULL DEFAULT '*',
-     termination   TEXT
-   );
-   CREATE INDEX games_by_status ON games (status, id);`,
-]
 
 /** A row of the games table, checked, as a stored game. */
 const GameRow = z
@@ -38,6 +14,7 @@ const GameRow = z
     ended_at: z.string().nullable(),
     player_color: z.enum(COLORS),
     engine_level: z.literal(ENGINE_LEVEL_IDS),
+    opponent: z.enum(OPPONENTS),
     initial_fen: z.string(),
     moves: z.string(),
     status: z.enum(GAME_STATUSES),
@@ -48,6 +25,7 @@ const GameRow = z
     id: row.id,
     playerColor: row.player_color,
     engineLevel: row.engine_level,
+    opponent: row.opponent,
     initialFen: row.initial_fen,
     startedAt: row.started_at,
     ...(row.ended_at !== null ? { endedAt: row.ended_at } : {}),
@@ -60,30 +38,19 @@ const GameRow = z
 /** What is needed to start storing a game. */
 export type NewStoredGame = Pick<
   StoredGame,
-  'playerColor' | 'engineLevel' | 'initialFen' | 'startedAt'
+  'playerColor' | 'engineLevel' | 'opponent' | 'initialFen' | 'startedAt'
 >
 
 export class GameStore {
-  private readonly db: DatabaseSync
-
-  /** Opens the database at `path`, or in memory for ':memory:', bringing it up to date. */
-  constructor(path: string) {
-    this.db = new DatabaseSync(path)
-    if (path !== ':memory:') this.db.exec('PRAGMA journal_mode = WAL')
-    this.migrate()
-  }
-
-  close(): void {
-    this.db.close()
-  }
+  constructor(private readonly db: DatabaseSync) {}
 
   create(game: NewStoredGame): StoredGame {
     const row = this.db
       .prepare(
-        `INSERT INTO games (started_at, player_color, engine_level, initial_fen, status)
-         VALUES (?, ?, ?, ?, 'in_progress') RETURNING *`,
+        `INSERT INTO games (started_at, player_color, engine_level, opponent, initial_fen, status)
+         VALUES (?, ?, ?, ?, ?, 'in_progress') RETURNING *`,
       )
-      .get(game.startedAt, game.playerColor, game.engineLevel, game.initialFen)
+      .get(game.startedAt, game.playerColor, game.engineLevel, game.opponent, game.initialFen)
     return this.read(row)
   }
 
@@ -135,23 +102,5 @@ export class GameStore {
       throw new Error(`A stored game is not in the expected form: ${z.prettifyError(parsed.error)}`)
     }
     return parsed.data
-  }
-
-  private migrate(): void {
-    const { user_version: version } = z
-      .object({ user_version: z.number() })
-      .parse(this.db.prepare('PRAGMA user_version').get())
-    for (const [index, step] of MIGRATIONS.entries()) {
-      if (index < version) continue
-      this.db.exec('BEGIN')
-      try {
-        this.db.exec(step)
-        this.db.exec(`PRAGMA user_version = ${index + 1}`)
-        this.db.exec('COMMIT')
-      } catch (error) {
-        this.db.exec('ROLLBACK')
-        throw error
-      }
-    }
   }
 }

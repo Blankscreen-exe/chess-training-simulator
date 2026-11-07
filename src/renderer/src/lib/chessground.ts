@@ -3,6 +3,7 @@
 import type { DrawShape } from '@lichess-org/chessground/draw'
 import type { Dests, Key } from '@lichess-org/chessground/types'
 import type { AnalysisLine } from '@shared/chess'
+import type { Candidate } from '@shared/coach'
 import { uciSquares } from '@shared/notation'
 
 export function toKey(square: string): Key {
@@ -28,5 +29,18 @@ export function lineArrows(lines: readonly AnalysisLine[]): DrawShape[] {
         ...(best ? {} : { modifiers: { lineWidth: 6 } }),
       },
     ]
+  })
+}
+
+/** The coach's candidate moves, as numbered yellow arrows, set apart from the engine's. */
+export function candidateArrows(candidates: readonly Candidate[]): DrawShape[] {
+  return candidates.map((candidate, index) => {
+    const [from, to] = uciSquares(candidate.uci)
+    return {
+      orig: toKey(from),
+      dest: toKey(to),
+      brush: 'yellow',
+      label: { text: String(index + 1) },
+    }
   })
 }

@@ -16,6 +16,13 @@ export const SIDE_CHOICES = ['white', 'random', 'black'] as const satisfies read
 )[]
 export type SideChoice = (typeof SIDE_CHOICES)[number]
 
+/**
+ * Who plays against the player: Stockfish at the chosen level, or the coach choosing among
+ * Stockfish's best moves (to make the game more human, or to set up a lesson).
+ */
+export const OPPONENTS = ['engine', 'coach'] as const
+export type OpponentKind = (typeof OPPONENTS)[number]
+
 /** What a pawn can become, in the letters UCI uses. */
 export const PROMOTION_PIECES = ['q', 'r', 'b', 'n'] as const
 export type PromotionPiece = (typeof PROMOTION_PIECES)[number]
@@ -72,6 +79,11 @@ export interface Position extends ShownPosition {
   promotions: string[]
 }
 
+/** Only what the board shows of a position, without the moves that could be made in it. */
+export function shownPart({ fen, turn, check, lastMove }: ShownPosition): ShownPosition {
+  return lastMove ? { fen, turn, check, lastMove } : { fen, turn, check }
+}
+
 /** A move that was played, and the position after it. */
 export interface PlayedMove {
   uci: string
@@ -87,6 +99,7 @@ export interface GameSummary {
   id: number
   playerColor: Color
   engineLevel: EngineLevelId
+  opponent: OpponentKind
   startedAt: string
   endedAt?: string
   status: GameStatus
@@ -109,15 +122,16 @@ export interface GameState extends Omit<GameSummary, 'plies'> {
   moves: PlayedMove[]
   position: Position
   /** Whether the engine is choosing its move. */
-  engineThinking: boolean
+  opponentThinking: boolean
   /** Whether the engine failed to choose its move; the player can ask it to try again. */
-  engineFailed: boolean
+  opponentFailed: boolean
 }
 
 /** How to start a game. */
 export interface NewGameOptions {
   playerColor: SideChoice
   engineLevel: EngineLevelId
+  opponent: OpponentKind
   /** The starting position; the standard one if left out. */
   fen?: string
 }

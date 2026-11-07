@@ -9,10 +9,15 @@ const accepts = (channel: IpcChannel, args: unknown[]) => ARGUMENTS[channel].saf
 // (ARGUMENTS is keyed by IpcChannel; see UnexposedChannels in src/shared/ipc.ts).
 describe('IPC argument schemas', () => {
   it('accept what the page sends', () => {
-    expect(accepts('game:new', [{ playerColor: 'random', engineLevel: 3 }])).toBe(true)
-    expect(accepts('game:new', [{ playerColor: 'white', engineLevel: 8, fen: START_FEN }])).toBe(
-      true,
-    )
+    expect(accepts('coach:set-settings', [{ mode: 'casual' }])).toBe(true)
+    expect(
+      accepts('game:new', [{ playerColor: 'random', engineLevel: 3, opponent: 'engine' }]),
+    ).toBe(true)
+    expect(
+      accepts('game:new', [
+        { playerColor: 'white', engineLevel: 8, opponent: 'coach', fen: START_FEN },
+      ]),
+    ).toBe(true)
     expect(accepts('game:move', [{ from: 'e7', to: 'e8', promotion: 'q' }])).toBe(true)
     expect(accepts('line:resolve', [START_FEN, ['e2e4', 'e7e5']])).toBe(true)
     expect(accepts('analysis:run', [{ fen: START_FEN, lines: 5 }])).toBe(true)
@@ -20,12 +25,26 @@ describe('IPC argument schemas', () => {
   })
 
   it('refuse anything else', () => {
-    expect(accepts('game:new', [{ playerColor: 'white', engineLevel: 9 }])).toBe(false)
-    expect(accepts('game:new', [{ playerColor: 'green', engineLevel: 3 }])).toBe(false)
-    expect(accepts('game:new', [{ playerColor: 'white', engineLevel: 3, admin: true }])).toBe(false)
-    expect(accepts('game:new', [{ playerColor: 'white', engineLevel: 3, fen: undefined }])).toBe(
-      false,
-    )
+    expect(
+      accepts('game:new', [{ playerColor: 'white', engineLevel: 3, opponent: 'magnus' }]),
+    ).toBe(false)
+    expect(accepts('coach:set-settings', [{ mode: 'loud' }])).toBe(false)
+    expect(
+      accepts('game:new', [{ playerColor: 'white', engineLevel: 9, opponent: 'engine' }]),
+    ).toBe(false)
+    expect(
+      accepts('game:new', [{ playerColor: 'green', engineLevel: 3, opponent: 'engine' }]),
+    ).toBe(false)
+    expect(
+      accepts('game:new', [
+        { playerColor: 'white', engineLevel: 3, opponent: 'engine', admin: true },
+      ]),
+    ).toBe(false)
+    expect(
+      accepts('game:new', [
+        { playerColor: 'white', engineLevel: 3, opponent: 'engine', fen: undefined },
+      ]),
+    ).toBe(false)
     expect(accepts('game:move', [{ from: 'e2', to: 'e9' }])).toBe(false)
     expect(accepts('game:move', [{ from: 'e7', to: 'e8', promotion: 'k' }])).toBe(false)
     expect(accepts('line:resolve', [START_FEN, ['Nf3']])).toBe(false)

@@ -12,12 +12,13 @@ export interface GameSnapshot {
   termination: GameState['termination'] | null
   player_color: GameState['playerColor']
   engine_level: string
+  opponent: GameState['opponent']
   side_to_move: GameState['position']['turn']
   in_check: boolean
   fen: string
   moves: string
   move_count: number
-  engine_thinking: boolean
+  opponent_thinking: boolean
 }
 
 export function snapshotOf(game: GameState): GameSnapshot {
@@ -28,6 +29,7 @@ export function snapshotOf(game: GameState): GameSnapshot {
     termination: game.termination ?? null,
     player_color: game.playerColor,
     engine_level: engineLevelName(game.engineLevel),
+    opponent: game.opponent,
     side_to_move: game.position.turn,
     in_check: game.position.check,
     fen: game.position.fen,
@@ -36,6 +38,6 @@ export function snapshotOf(game: GameState): GameSnapshot {
       game.moves.map((move) => move.san),
     ),
     move_count: game.moves.length,
-    engine_thinking: game.engineThinking,
+    opponent_thinking: game.opponentThinking,
   }
 }

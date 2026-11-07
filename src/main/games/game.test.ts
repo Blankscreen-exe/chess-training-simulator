@@ -8,6 +8,7 @@ const stored = (overrides: Partial<StoredGame> = {}): StoredGame => ({
   id: 1,
   playerColor: 'white',
   engineLevel: 3,
+  opponent: 'engine',
   initialFen: START_FEN,
   startedAt: '2026-11-07T12:00:00.000Z',
   moves: [],
@@ -27,7 +28,7 @@ describe('Game', () => {
     })
     expect(game.play({ from: 'e2', to: 'e4' }, 'white')).toEqual({ ok: true })
     expect(game.turn).toBe('black')
-    expect(game.engineColor).toBe('black')
+    expect(game.opponentColor).toBe('black')
   })
 
   it('refuses illegal moves and leaves the game as it was', () => {
@@ -67,8 +68,8 @@ describe('Game', () => {
       status: 'finished',
       result: '0-1',
       termination: 'checkmate',
-      engineThinking: false,
-      engineFailed: false,
+      opponentThinking: false,
+      opponentFailed: false,
     })
     expect(state.endedAt).toBeDefined()
     expect(game.play({ from: 'a2', to: 'a3' }, 'white')).toEqual({
@@ -145,6 +146,7 @@ describe('summaryOf', () => {
       id: 1,
       playerColor: 'white',
       engineLevel: 3,
+      opponent: 'engine',
       startedAt: '2026-11-07T12:00:00.000Z',
       status: 'in_progress',
       result: '*',

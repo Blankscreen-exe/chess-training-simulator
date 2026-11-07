@@ -8,9 +8,10 @@ import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/
 import { COACH_SERVER_NAME } from '@shared/coach'
 import { checkRequest } from './guard'
 import { COACH_INSTRUCTIONS } from './instructions'
-import { registerCoachTools, type CoachToolDependencies } from './tools'
+import { registerCoachTools, type CoachContext } from './tools'
 
-export interface CoachServerOptions extends CoachToolDependencies {
+export interface CoachServerOptions {
+  context: CoachContext
   /** The port to listen on; 0 for any free one, as in tests. */
   port: number
   version: string
@@ -53,7 +54,7 @@ export async function startCoachServer(options: CoachServerOptions): Promise<Coa
       { name: COACH_SERVER_NAME, version },
       { instructions: COACH_INSTRUCTIONS },
     )
-    registerCoachTools(server, options)
+    registerCoachTools(server, options.context)
     // No session id generator: stateless, so each request stands alone.
     const transport = new StreamableHTTPServerTransport({ enableJsonResponse: true })
     response.on('close', () => {

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
-import { engineLevelName } from '@shared/engine-levels'
 import { useQuery } from '../../hooks/useQuery'
 import { api } from '../../lib/api'
+import { opponentName } from '../../lib/opponent'
 import { describeEnding, playerOutcome, type PlayerOutcome } from '../../lib/outcome'
 
 const TONES: Record<PlayerOutcome, string> = {
@@ -46,8 +46,8 @@ export function HistoryPanel({ onOpen }: { onOpen: (id: number) => void }) {
                 </span>
               </div>
               <p className="text-xs text-stone-500">
-                {game.playerColor === 'white' ? 'White' : 'Black'} vs{' '}
-                {engineLevelName(game.engineLevel)} · {moves} {moves === 1 ? 'move' : 'moves'}
+                {game.playerColor === 'white' ? 'White' : 'Black'} vs {opponentName(game)} · {moves}{' '}
+                {moves === 1 ? 'move' : 'moves'}
               </p>
             </button>
           </li>

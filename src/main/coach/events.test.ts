@@ -1,61 +1,57 @@
 import { describe, expect, it } from 'vitest'
-import type { GameState, PlayedMove } from '@shared/chess'
-import { START_FEN } from '@shared/chess'
-import { gameEvents } from './events'
+import { gameState, playedMoves } from '@test-support/fixtures'
+import { candidateMoves, gameEvents } from './events'
 
-const E4 = 'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1'
-const E5 = 'rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2'
-const played: PlayedMove[] = [
-  { uci: 'e2e4', san: 'e4', color: 'white', check: false, fenAfter: E4 },
-  { uci: 'e7e5', san: 'e5', color: 'black', check: false, fenAfter: E5 },
-]
-
-const game = (overrides: Partial<GameState> = {}): GameState => ({
-  id: 1,
-  playerColor: 'white',
-  engineLevel: 3,
-  startedAt: '2026-11-07T12:00:00.000Z',
-  status: 'in_progress',
-  result: '*',
-  initialFen: START_FEN,
-  moves: [],
-  position: { fen: START_FEN, turn: 'white', check: false, dests: {}, promotions: [] },
-  engineThinking: false,
-  engineFailed: false,
-  ...overrides,
-})
+const [e4, e5] = playedMoves(['e4', 'e5'])
 
 describe('gameEvents', () => {
   it('announces a new game, with how far it has got', () => {
-    expect(gameEvents(null, game({ moves: played }))).toEqual([
+    const resumed = gameState({ moves: [e4!, e5!] })
+    expect(gameEvents(null, resumed)).toEqual([
       {
         type: 'game_started',
         game_id: 1,
         player_color: 'white',
         engine_level: 'Level 3',
+        opponent: 'engine',
         moves_played: 2,
-        fen: START_FEN,
+        fen: e5!.fenAfter,
       },
     ])
   })
 
-  it('names each new move, who made it, and its number', () => {
-    expect(gameEvents(game(), game({ moves: played }))).toEqual([
-      { type: 'move', by: 'player', move: '1. e4', fen_after: E4 },
-      { type: 'move', by: 'engine', move: '1… e5', fen_after: E5 },
+  it('names each new move, who made it, its number and its place in the game', () => {
+    expect(gameEvents(gameState(), gameState({ moves: [e4!, e5!] }))).toEqual([
+      { type: 'move', by: 'player', ply: 1, move: '1. e4', fen_after: e4!.fenAfter },
+      { type: 'move', by: 'opponent', ply: 2, move: '1… e5', fen_after: e5!.fenAfter },
     ])
   })
 
   it('says when the game ends, once', () => {
-    const over = game({ status: 'resigned', result: '0-1', termination: 'resignation' })
-    expect(gameEvents(game(), over)).toEqual([
+    const over = gameState({ status: 'resigned', result: '0-1', termination: 'resignation' })
+    expect(gameEvents(gameState(), over)).toEqual([
       { type: 'game_ended', result: '0-1', termination: 'resignation' },
     ])
     expect(gameEvents(over, over)).toEqual([])
   })
 
   it('has nothing to say about a change that is not a move or an ending', () => {
-    expect(gameEvents(game(), game({ engineThinking: true }))).toEqual([])
-    expect(gameEvents(game(), null)).toEqual([])
+    expect(gameEvents(gameState(), gameState({ opponentThinking: true }))).toEqual([])
+    expect(gameEvents(gameState(), null)).toEqual([])
+  })
+})
+
+describe('candidateMoves', () => {
+  it('gives the first move of each line, with the engine’s view in words', () => {
+    expect(
+      candidateMoves([
+        { rank: 1, depth: 10, score: { type: 'cp', value: 31 }, uci: ['e2e4'], san: ['e4'] },
+        { rank: 2, depth: 10, score: { type: 'mate', value: -2 }, uci: ['f2f3'], san: ['f3'] },
+        { rank: 3, depth: 10, score: { type: 'cp', value: 0 }, uci: [], san: [] },
+      ]),
+    ).toEqual([
+      { move: 'e4', evaluation: '+0.31, White is better' },
+      { move: 'f3', evaluation: 'mate in 2 for Black' },
+    ])
   })
 })

@@ -1,11 +1,10 @@
-// What the engine thinks of a position, as the app shows it. Each new request ends the one before
-// it, so the panel always shows the position on the board, not one the player has left.
-import type { Analysis, AnalysisRequest, Color, Result, Score } from '@shared/chess'
+// What the engine thinks of a position, for the analysis panel. Each new request ends the one
+// before it, so the panel always shows the position on the board, not one the player has left.
+import type { Analysis, AnalysisRequest, Result } from '@shared/chess'
 import { MAX_ANALYSIS_LINES } from '@shared/chess'
-import { splitFen } from '@shared/notation'
-import { normalizeFen, sanLine } from '../chess/rules'
+import { normalizeFen } from '../chess/rules'
 import type { Engine, SearchLimits } from '../engine/engine'
-import type { UciScore } from '../engine/uci'
+import { toAnalysis } from './evaluation'
 
 /** How long, and how deep, one analysis goes. */
 const ANALYSIS_LIMITS: SearchLimits = { movetimeMs: 1500, depth: 20 }
@@ -32,28 +31,6 @@ export class AnalysisService {
       stillWanted: () => id === this.latest,
     })
     if (!found || id !== this.latest) return { ok: true, analysis: null }
-
-    const { turn } = splitFen(fen)
-    return {
-      ok: true,
-      analysis: {
-        fen,
-        depth: found.depth,
-        lines: found.lines.map((line) => ({
-          rank: line.multipv,
-          depth: line.depth,
-          score: fromWhite(line.score, turn),
-          uci: line.pv,
-          san: sanLine(fen, line.pv),
-        })),
-      },
-    }
+    return { ok: true, analysis: toAnalysis(fen, found) }
   }
-}
-
-/** A score from the side to move, turned to White's side. */
-export function fromWhite(score: UciScore, turn: Color): Score {
-  const value = turn === 'white' ? score.value : -score.value
-  // Avoid -0, which would show as "−0.00".
-  return { type: score.type, value: value === 0 ? 0 : value }
 }

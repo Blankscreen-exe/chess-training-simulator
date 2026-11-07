@@ -25,7 +25,7 @@ describe('playerOutcome and describeEnding', () => {
   it('name who resigned', () => {
     const resigned = ending({ status: 'resigned', result: '0-1', termination: 'resignation' })
     expect(describeEnding(resigned)).toBe('You resigned')
-    expect(describeEnding({ ...resigned, playerColor: 'black' })).toBe('Stockfish resigned')
+    expect(describeEnding({ ...resigned, playerColor: 'black' })).toBe('Your opponent resigned')
   })
 
   it('describe draws, unfinished games and games under way', () => {
@@ -75,21 +75,20 @@ describe('scoreSheet', () => {
 
 describe('loadNewGameChoices', () => {
   const storage = (value: string | null) => ({ getItem: () => value })
+  const defaults = { playerColor: 'white', engineLevel: 3, opponent: 'engine' }
 
   it('reads what was saved', () => {
-    expect(loadNewGameChoices(storage('{"playerColor":"black","engineLevel":6}'))).toEqual({
-      playerColor: 'black',
-      engineLevel: 6,
-    })
+    expect(
+      loadNewGameChoices(storage('{"playerColor":"black","engineLevel":6,"opponent":"coach"}')),
+    ).toEqual({ playerColor: 'black', engineLevel: 6, opponent: 'coach' })
   })
 
   it('falls back to the defaults for anything missing, unknown or broken', () => {
-    const defaults = { playerColor: 'white', engineLevel: 3 }
     expect(loadNewGameChoices(storage(null))).toEqual(defaults)
     expect(loadNewGameChoices(storage('not json'))).toEqual(defaults)
-    expect(loadNewGameChoices(storage('{"playerColor":"green","engineLevel":42}'))).toEqual(
-      defaults,
-    )
+    expect(
+      loadNewGameChoices(storage('{"playerColor":"green","engineLevel":42,"opponent":"magnus"}')),
+    ).toEqual(defaults)
     expect(loadNewGameChoices(storage('{"engineLevel":5}'))).toEqual({
       ...defaults,
       engineLevel: 5,

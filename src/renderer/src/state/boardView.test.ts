@@ -1,39 +1,35 @@
 import { describe, expect, it } from 'vitest'
-import type { GameRecord, GameState, LineStep, PlayedMove, Position } from '@shared/chess'
+import type { GameRecord, LineStep } from '@shared/chess'
 import { START_FEN } from '@shared/chess'
+import { gameState, playedMoves, position } from '@test-support/fixtures'
 import {
+  actionFor,
   afterPly,
   boardReducer,
   hasMoves,
   isAnalysable,
   LIVE,
+  previewCaption,
   shownPosition,
   stepRange,
   type BoardView,
 } from './boardView'
 
-const position = (fen: string): Position => ({
-  fen,
-  turn: fen.split(' ')[1] === 'b' ? 'black' : 'white',
-  check: false,
-  dests: { e2: ['e4'] },
-  promotions: [],
+const moves = playedMoves(['e4', 'e5'])
+const AFTER_E4 = moves[0]!.fenAfter
+const AFTER_E5 = moves[1]!.fenAfter
+
+const step = (uci: string, fen: string): LineStep => ({
+  uci,
+  san: uci,
+  position: position(fen, { dests: { e2: ['e4'] } }),
 })
-
-const AFTER_E4 = 'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1'
-const AFTER_E5 = 'rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2'
-
-const moves: PlayedMove[] = [
-  { uci: 'e2e4', san: 'e4', color: 'white', check: false, fenAfter: AFTER_E4 },
-  { uci: 'e7e5', san: 'e5', color: 'black', check: false, fenAfter: AFTER_E5 },
-]
-
-const step = (uci: string, fen: string): LineStep => ({ uci, san: uci, position: position(fen) })
 
 const record: GameRecord = {
   id: 7,
   playerColor: 'white',
   engineLevel: 3,
+  opponent: 'engine',
   startedAt: '2026-11-07T12:00:00.000Z',
   status: 'finished',
   result: '1-0',
@@ -43,19 +39,7 @@ const record: GameRecord = {
   pgn: '',
 }
 
-const game: GameState = {
-  id: 1,
-  playerColor: 'white',
-  engineLevel: 3,
-  startedAt: '2026-11-07T12:00:00.000Z',
-  status: 'in_progress',
-  result: '*',
-  initialFen: START_FEN,
-  moves,
-  position: position(AFTER_E5),
-  engineThinking: false,
-  engineFailed: false,
-}
+const game = gameState({ moves })
 
 const reduce = (view: BoardView, ...actions: Parameters<typeof boardReducer>[1][]) =>
   actions.reduce(boardReducer, view)
@@ -78,7 +62,7 @@ describe('boardReducer', () => {
   it('replaces what followed when a move is tried earlier on the analysis board', () => {
     const analysis = reduce(
       LIVE,
-      { type: 'open-analysis', start: position(START_FEN) },
+      { type: 'open-analysis', start: position(START_FEN, { dests: { e2: ['e4'] } }) },
       { type: 'analysis-move', step: step('e2e4', AFTER_E4) },
       { type: 'analysis-move', step: step('e7e5', AFTER_E5) },
       { type: 'go-to', ply: 1, liveMoves: 0 },
@@ -132,7 +116,7 @@ describe('boardReducer', () => {
     it('are left when a move is picked from the move list', () => {
       const analysis = reduce(
         LIVE,
-        { type: 'open-analysis', start: position(START_FEN) },
+        { type: 'open-analysis', start: position(START_FEN, { dests: { e2: ['e4'] } }) },
         { type: 'analysis-move', step: step('e2e4', AFTER_E4) },
       )
       expect(reduce(open(analysis), { type: 'select-move', ply: 0, liveMoves: 0 })).toMatchObject({
@@ -165,6 +149,7 @@ describe('shownPosition', () => {
       title: '',
       start: position(START_FEN),
       steps: [step('e2e4', AFTER_E4)],
+      captions: [],
       ply: 1,
       playing: false,
       returnTo: LIVE,
@@ -191,5 +176,38 @@ describe('isAnalysable', () => {
   it('is false while the board moves by itself or is being set up', () => {
     expect(isAnalysable(LIVE)).toBe(true)
     expect(isAnalysable({ kind: 'editor', fen: START_FEN })).toBe(false)
+  })
+})
+
+describe('previews from the coach', () => {
+  const command = {
+    type: 'preview',
+    title: 'Italian',
+    start: { fen: START_FEN, turn: 'white', check: false },
+    steps: [step('e2e4', AFTER_E4), step('e7e5', AFTER_E5)],
+    captions: ['Take the centre'],
+  } as const
+
+  it('play out as previews, saying something about each move that has a caption', () => {
+    let view = reduce(
+      LIVE,
+      actionFor({ ...command, steps: [...command.steps], captions: [...command.captions] }),
+    )
+    expect(view).toMatchObject({ kind: 'preview', title: 'Italian', ply: 0 })
+    expect(previewCaption(view)).toBeNull()
+    view = reduce(view, { type: 'preview-tick' })
+    expect(previewCaption(view)).toBe('Take the centre')
+    view = reduce(view, { type: 'preview-tick' })
+    expect(previewCaption(view)).toBeNull()
+  })
+
+  it('open positions on the analysis board, and show the game', () => {
+    const start = position(START_FEN)
+    expect(reduce(LIVE, actionFor({ type: 'open-analysis', start }))).toMatchObject({
+      kind: 'analysis',
+      start,
+    })
+    const replay = reduce(LIVE, { type: 'open-replay', game: record })
+    expect(reduce(replay, actionFor({ type: 'show-game' }))).toBe(LIVE)
   })
 })

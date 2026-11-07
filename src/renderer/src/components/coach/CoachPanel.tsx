@@ -1,7 +1,9 @@
 import type { CoachState } from '@shared/coach'
 import { api } from '../../lib/api'
+import { CandidateList } from './CandidateList'
 import { ChatInput } from './ChatInput'
 import { ChatLog } from './ChatLog'
+import { CoachSettingsBar } from './CoachSettingsBar'
 import { CoachSetup } from './CoachSetup'
 import { COACH_STATUS } from './coachStatus'
 
@@ -29,11 +31,13 @@ export function CoachPanel({ coach }: { coach: CoachState | undefined }) {
           {status.label}
         </span>
       </div>
+      <CoachSettingsBar settings={coach.settings} />
 
       <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-4">
         {note && (
           <p className="rounded-md bg-stone-800/60 px-3 py-2 text-xs text-stone-300">{note}</p>
         )}
+        {coach.candidates && <CandidateList candidates={coach.candidates} />}
         <Conversation coach={coach} />
       </div>
 

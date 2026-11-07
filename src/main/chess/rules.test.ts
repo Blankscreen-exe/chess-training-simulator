@@ -94,8 +94,11 @@ describe('replay', () => {
   })
 
   it('stops at the first move that cannot be played, or is not a move at all', () => {
-    expect(replay(new Chess(), ['e2e4', 'e2e4', 'd2d4']).refused).toEqual({ index: 1, uci: 'e2e4' })
-    expect(replay(new Chess(), ['Nf3']).refused).toEqual({ index: 0, uci: 'Nf3' })
+    expect(replay(new Chess(), ['e2e4', 'e2e4', 'd2d4']).refused).toEqual({
+      index: 1,
+      move: 'e2e4',
+    })
+    expect(replay(new Chess(), ['Nf6']).refused).toEqual({ index: 0, move: 'Nf6' })
   })
 })
 

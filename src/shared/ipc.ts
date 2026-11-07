@@ -15,7 +15,7 @@ import type {
   Position,
   Result,
 } from './chess'
-import type { ChatMessage, CoachState } from './coach'
+import type { BoardCommand, ChatMessage, CoachSettings, CoachState } from './coach'
 
 /** The app's name, version and the versions of what it runs on. */
 export interface AppInfo {
@@ -40,7 +40,7 @@ export interface IpcContract {
   'game:move': { args: [move: MoveInput]; result: GameChange }
   'game:resign': { args: []; result: GameChange }
   'game:abandon': { args: []; result: GameChange }
-  'game:retry-engine': { args: []; result: GameChange }
+  'game:retry-opponent': { args: []; result: GameChange }
   'games:list': { args: []; result: GameSummary[] }
   'games:get': { args: [id: number]; result: Result<{ game: GameRecord }> }
   'position:describe': { args: [fen: string]; result: Result<{ position: Position }> }
@@ -55,6 +55,7 @@ export interface IpcContract {
   }
   'coach:get': { args: []; result: CoachState }
   'coach:send': { args: [text: string]; result: Result<{ message: ChatMessage }> }
+  'coach:set-settings': { args: [change: Partial<CoachSettings>]; result: CoachState }
 }
 
 export type IpcChannel = keyof IpcContract
@@ -65,6 +66,8 @@ export type IpcResult<C extends IpcChannel> = IpcContract[C]['result']
 export interface IpcEvents {
   'game:state': GameState | null
   'coach:state': CoachState
+  /** Something the coach asks the board to do, once. */
+  'coach:board': BoardCommand
 }
 
 export type IpcEvent = keyof IpcEvents
@@ -83,13 +86,13 @@ export const API_CHANNELS = {
     move: 'game:move',
     resign: 'game:resign',
     abandon: 'game:abandon',
-    retryEngine: 'game:retry-engine',
+    retryOpponent: 'game:retry-opponent',
   },
   games: { list: 'games:list', get: 'games:get' },
   position: { describe: 'position:describe', play: 'position:play' },
   line: { resolve: 'line:resolve' },
   analysis: { run: 'analysis:run' },
-  coach: { get: 'coach:get', send: 'coach:send' },
+  coach: { get: 'coach:get', send: 'coach:send', setSettings: 'coach:set-settings' },
 } as const satisfies ApiTree
 
 export type ApiOf<T> = {

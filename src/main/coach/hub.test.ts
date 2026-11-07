@@ -1,26 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { GameState } from '@shared/chess'
-import { START_FEN } from '@shared/chess'
-import type { CoachState } from '@shared/coach'
+import type { BoardCommand, CoachState } from '@shared/coach'
 import { CoachHub, type CoachTimings } from './hub'
+import { memoryKeeper } from './test-support'
 
 const TIMINGS: CoachTimings = { waitMs: 1_000, connectedWithinMs: 5_000, idleMs: 60_000 }
 
-const game = (moves: GameState['moves'] = []): GameState => ({
-  id: 1,
-  playerColor: 'white',
-  engineLevel: 3,
-  startedAt: '2026-11-07T12:00:00.000Z',
-  status: 'in_progress',
-  result: '*',
-  initialFen: START_FEN,
-  moves,
-  position: { fen: START_FEN, turn: 'white', check: false, dests: {}, promotions: [] },
-  engineThinking: false,
-  engineFailed: false,
-})
-
-const E4 = { uci: 'e2e4', san: 'e4', color: 'white', check: false, fenAfter: START_FEN } as const
+function makeHub(timings = TIMINGS, keeper = memoryKeeper().keeper) {
+  return new CoachHub({ port: 8765, settings: keeper, timings, now: () => Date.now() })
+}
 
 describe('CoachHub', () => {
   let hub: CoachHub
@@ -28,7 +15,7 @@ describe('CoachHub', () => {
 
   beforeEach(() => {
     vi.useFakeTimers()
-    hub = new CoachHub({ port: 8765, timings: TIMINGS, now: () => Date.now() })
+    hub = makeHub()
     states = []
     hub.onChange((state) => states.push(state))
   })
@@ -37,7 +24,7 @@ describe('CoachHub', () => {
   it('starts offline, connects when Claude is in touch, and lapses without it', () => {
     expect(hub.state().status).toBe('offline')
     hub.touch()
-    expect(hub.state().status).toBe('connected')
+    expect(hub.connected).toBe(true)
     vi.advanceTimersByTime(TIMINGS.connectedWithinMs)
     hub.refresh()
     expect(states.map((state) => state.status)).toEqual(['connected', 'offline'])
@@ -61,11 +48,7 @@ describe('CoachHub', () => {
 
   it('comes back empty after the wait, and counts as connected all the while', async () => {
     // A wait longer than the connection window, so only the wait itself keeps it connected.
-    const patient = new CoachHub({
-      port: 8765,
-      timings: { ...TIMINGS, waitMs: 10_000, connectedWithinMs: 5_000 },
-      now: () => Date.now(),
-    })
+    const patient = makeHub({ ...TIMINGS, waitMs: 10_000, connectedWithinMs: 5_000 })
     const waiting = patient.waitForEvents()
     vi.advanceTimersByTime(6_000)
     expect(patient.state().status).toBe('connected')
@@ -88,13 +71,12 @@ describe('CoachHub', () => {
     await expect(newer).resolves.toEqual({ events: [{ type: 'player_message', text: 'hi' }] })
   })
 
-  it('passes on moves only while Claude is connected', async () => {
-    hub.gameChanged(game())
-    hub.gameChanged(game([E4]))
+  it('delivers events only while Claude is listening', async () => {
+    hub.deliver([{ type: 'mode_changed', mode: 'casual' }])
     hub.touch()
-    hub.gameChanged(game([E4, { ...E4, uci: 'e7e5', san: 'e5', color: 'black' }]))
+    hub.deliver([{ type: 'mode_changed', mode: 'silent' }])
     await expect(hub.waitForEvents()).resolves.toEqual({
-      events: [{ type: 'move', by: 'engine', move: '1… e5', fen_after: START_FEN }],
+      events: [{ type: 'mode_changed', mode: 'silent' }],
     })
   })
 
@@ -109,6 +91,15 @@ describe('CoachHub', () => {
     expect(hub.state().status).toBe('connected')
   })
 
+  it('does not pause while the player is busy', async () => {
+    vi.advanceTimersByTime(TIMINGS.idleMs - 1)
+    hub.noteActivity()
+    vi.advanceTimersByTime(TIMINGS.idleMs - 1)
+    const waiting = hub.waitForEvents()
+    await vi.advanceTimersByTimeAsync(TIMINGS.waitMs)
+    await expect(waiting).resolves.toEqual({ events: [] })
+  })
+
   it('records what Claude says, and refuses empty messages from either side', () => {
     expect(hub.say('Develop your knights first.').ok).toBe(true)
     expect(hub.say('   ')).toEqual({ ok: false, error: 'There is nothing to say' })
@@ -119,5 +110,35 @@ describe('CoachHub', () => {
   it('reports when its server could not start', () => {
     hub.setUnavailable('Port 8765 is in use')
     expect(hub.state()).toMatchObject({ status: 'unavailable', problem: 'Port 8765 is in use' })
+  })
+
+  describe('settings', () => {
+    it('start from what was kept, and keep every change', () => {
+      const { keeper, saved } = memoryKeeper({ mode: 'silent', playerLevel: 'club' })
+      const kept = makeHub(TIMINGS, keeper)
+      expect(kept.state().settings).toEqual({ mode: 'silent', playerLevel: 'club' })
+      kept.updateSettings({ playerLevel: 'beginner' }, 'player')
+      expect(saved).toEqual([{ mode: 'silent', playerLevel: 'beginner' }])
+    })
+
+    it('tell Claude when the player changes the mode, but not when Claude does', async () => {
+      hub.touch()
+      hub.updateSettings({ mode: 'casual' }, 'coach')
+      hub.updateSettings({ mode: 'blunder_watch' }, 'player')
+      await expect(hub.waitForEvents()).resolves.toEqual({
+        events: [{ type: 'mode_changed', mode: 'blunder_watch' }],
+      })
+    })
+  })
+
+  it('shows candidates until they are cleared, and passes board commands on', () => {
+    const commands: BoardCommand[] = []
+    hub.onBoardCommand((command) => commands.push(command))
+    hub.setCandidates({ fen: 'x', moves: [{ uci: 'e2e4', san: 'e4' }] })
+    expect(hub.state().candidates?.moves).toHaveLength(1)
+    hub.setCandidates(null)
+    expect(hub.state().candidates).toBeNull()
+    hub.command({ type: 'show-game' })
+    expect(commands).toEqual([{ type: 'show-game' }])
   })
 })

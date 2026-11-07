@@ -9,7 +9,12 @@ export function inProcessTransport(
   enginePath = resolve(PACKAGE_BUILDS, ENGINE_FILE),
 ): UciTransport {
   const lines = new Listeners<string>()
+  // Stockfish's loader sets the global fetch to null under Node, to make itself read its
+  // WebAssembly from disk. In its own process (as in the app) that is harmless; sharing a
+  // process with tests that use fetch, it is not, so fetch is put back once it has loaded.
+  const { fetch } = globalThis
   const engine = loadStockfish(enginePath, (line) => lines.emit(line))
+  globalThis.fetch = fetch
   let closed = false
   return {
     send(command) {

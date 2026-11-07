@@ -27,8 +27,8 @@ function whoMoves(
   const playersTurn =
     view.kind === 'live' &&
     game?.status === 'in_progress' &&
-    !game.engineThinking &&
-    !game.engineFailed &&
+    !game.opponentThinking &&
+    !game.opponentFailed &&
     position.turn === game.playerColor
   return playersTurn ? { color: game.playerColor, dests: position.dests } : undefined
 }

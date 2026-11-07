@@ -3,7 +3,7 @@ import { Chess } from 'chess.js'
 import { afterAll, describe, expect, it } from 'vitest'
 import { START_FEN } from '@shared/chess'
 import { ENGINE_LEVEL_IDS } from '@shared/engine-levels'
-import { Engine, goCommand, type UciTransport } from './engine'
+import { Engine, goCommand, rankLines, type UciTransport } from './engine'
 import { inProcessTransport } from './in-process-transport'
 import { playSettings } from './levels'
 
@@ -75,6 +75,30 @@ describe('Engine', () => {
     exit('it crashed')
     await expect(asked).rejects.toThrow('The engine stopped: it crashed')
     expect(dying.alive).toBe(false)
+  })
+})
+
+describe('rankLines', () => {
+  const info = (multipv: number, depth: number, move: string) => ({
+    multipv,
+    depth,
+    score: { type: 'cp' as const, value: 0 },
+    bound: false,
+    pv: [move],
+  })
+
+  it('lists each move once, deepest first, when the search stopped part-way through a depth', () => {
+    // At depth 15, e4 led and Nf3 was second; at depth 16 Nf3 overtook it before time ran out.
+    const lines = rankLines([info(1, 15, 'e2e4'), info(1, 16, 'g1f3'), info(3, 15, 'd2d4')], 3)
+    expect(lines.map((line) => [line.multipv, line.pv[0], line.depth])).toEqual([
+      [1, 'g1f3', 16],
+      [2, 'e2e4', 15],
+      [3, 'd2d4', 15],
+    ])
+  })
+
+  it('keeps no more lines than asked for', () => {
+    expect(rankLines([info(1, 9, 'e2e4'), info(2, 9, 'd2d4')], 1)).toHaveLength(1)
   })
 })
 

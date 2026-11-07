@@ -2,6 +2,7 @@ import type { DrawShape } from '@lichess-org/chessground/draw'
 import type { Color, GameState, Score } from '@shared/chess'
 import { useBoardMoves } from '../../hooks/useBoardMoves'
 import type { BoardState } from '../../hooks/useBoardView'
+import { previewCaption } from '../../state/boardView'
 import { BoardBanner } from './BoardBanner'
 import { ChessBoard } from './ChessBoard'
 import { EvalBar } from './EvalBar'
@@ -16,7 +17,8 @@ export function BoardArea({
   board,
   game,
   orientation,
-  evaluation,
+  score,
+  arrows,
   notice,
   notify,
 }: {
@@ -24,12 +26,16 @@ export function BoardArea({
   game: GameState | null
   orientation: Color
   /** The engine's view of the position, while it is being shown. */
-  evaluation: { score: Score | null; arrows: readonly DrawShape[] } | null
+  /** The engine's view of the position, for the bar beside the board; undefined hides the bar. */
+  score: Score | null | undefined
+  /** The engine's and the coach's arrows, as one list, kept the same array while unchanged. */
+  arrows: readonly DrawShape[]
   notice: string | null
   notify: (message: string) => void
 }) {
   const { view, dispatch, position, range, goTo } = board
   const moves = useBoardMoves({ view, position, game, dispatch, notify })
+  const caption = previewCaption(view)
 
   return (
     <section className="flex min-w-0 flex-1 flex-col gap-3">
@@ -39,8 +45,8 @@ export function BoardArea({
         <div className="absolute inset-0 flex items-center justify-center">
           <div className="flex gap-2" style={{ height: BOARD_SIZE }}>
             {/* Kept in the layout when hidden, so the board does not shift when it appears. */}
-            <div className={`flex ${evaluation ? '' : 'invisible'}`}>
-              <EvalBar score={evaluation?.score ?? null} orientation={orientation} />
+            <div className={`flex ${score === undefined ? 'invisible' : ''}`}>
+              <EvalBar score={score ?? null} orientation={orientation} />
             </div>
             <div className="relative" style={{ width: BOARD_SIZE }}>
               <ChessBoard
@@ -51,9 +57,17 @@ export function BoardArea({
                 lastMove={position.lastMove}
                 movable={moves.movable}
                 onMove={moves.onMove}
-                shapes={evaluation?.arrows}
+                shapes={arrows}
                 revision={moves.revision}
               />
+              {caption && (
+                <p
+                  className="pointer-events-none absolute inset-x-3 bottom-3 z-20 mx-auto w-fit max-w-[90%] rounded-md bg-amber-950/80 px-3 py-2 text-sm text-amber-50 shadow-lg"
+                  aria-live="polite"
+                >
+                  {caption}
+                </p>
+              )}
               {moves.promotion && (
                 <PromotionPicker
                   color={moves.promotion.color}

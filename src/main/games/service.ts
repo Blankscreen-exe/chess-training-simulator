@@ -1,4 +1,4 @@
-// The game being played: the player's moves, the engine's replies, and keeping it all stored.
+// The game being played: the player's moves, the opponent's replies, and keeping it all stored.
 // There is at most one game under way; starting another leaves the last one abandoned.
 import { Chess } from 'chess.js'
 import type {
@@ -8,30 +8,24 @@ import type {
   GameSummary,
   MoveInput,
   NewGameOptions,
+  OpponentKind,
   Result,
   SideChoice,
 } from '@shared/chess'
 import { START_FEN } from '@shared/chess'
 import { parseUci } from '@shared/notation'
 import { normalizeFen, outcome } from '../chess/rules'
-import { playSettings, type PlaySettings } from '../engine/levels'
 import { Listeners } from '../util/listeners'
 import { Game } from './game'
+import type { Opponent } from './opponent'
 import type { GameStore } from './store'
-
-/** The part of the engine a game needs. */
-export interface PlayingEngine {
-  bestMove(fen: string, settings: PlaySettings): Promise<string | null>
-  newGame(): Promise<void>
-  stop(): void
-}
 
 export interface GameServiceOptions {
   store: GameStore
-  /** The engine to play with; asked for again after it fails, so it can be started afresh. */
-  engine: () => PlayingEngine
-  /** The engine waits at least this long before moving, so its replies do not land instantly. */
-  minEngineDelayMs?: number
+  /** Who chooses the opponent's moves, for each kind of opponent a game can have. */
+  opponents: Record<OpponentKind, Opponent>
+  /** The opponent waits at least this long before moving, so its replies do not land instantly. */
+  minReplyDelayMs?: number
   random?: () => number
   now?: () => Date
   log?: (message: string, error?: unknown) => void
@@ -40,26 +34,25 @@ export interface GameServiceOptions {
 export type GameChange = Result<{ state: GameState }>
 
 const NO_GAME = { ok: false, error: 'There is no game under way' } as const
-const DEFAULT_MIN_ENGINE_DELAY_MS = 400
+const DEFAULT_MIN_REPLY_DELAY_MS = 400
 
 export class GameService {
   private game: Game | null = null
-  private engineThinking = false
-  private engineFailed = false
-  /** Goes up whenever the game changes hands, so a reply meant for an old game is dropped. */
-  private generation = 0
+  /** Set while the opponent chooses its move; aborting it gives up on that move. */
+  private reply: AbortController | null = null
+  private opponentFailed = false
   private readonly changes = new Listeners<GameState | null>()
   private readonly store: GameStore
-  private readonly engine: () => PlayingEngine
-  private readonly minEngineDelayMs: number
+  private readonly opponents: Record<OpponentKind, Opponent>
+  private readonly minReplyDelayMs: number
   private readonly random: () => number
   private readonly now: () => Date
   private readonly log: (message: string, error?: unknown) => void
 
   constructor(options: GameServiceOptions) {
     this.store = options.store
-    this.engine = options.engine
-    this.minEngineDelayMs = options.minEngineDelayMs ?? DEFAULT_MIN_ENGINE_DELAY_MS
+    this.opponents = options.opponents
+    this.minReplyDelayMs = options.minReplyDelayMs ?? DEFAULT_MIN_REPLY_DELAY_MS
     this.random = options.random ?? Math.random
     this.now = options.now ?? (() => new Date())
     this.log = options.log ?? ((message, error) => console.error(message, error))
@@ -71,7 +64,7 @@ export class GameService {
   }
 
   current(): GameState | null {
-    return this.game?.state({ thinking: this.engineThinking, failed: this.engineFailed }) ?? null
+    return this.game?.state({ thinking: this.reply !== null, failed: this.opponentFailed }) ?? null
   }
 
   /** Carries on with the last game left under way, if any. */
@@ -108,14 +101,13 @@ export class GameService {
       this.store.create({
         playerColor: this.pickColor(options.playerColor),
         engineLevel: options.engineLevel,
+        opponent: options.opponent,
         initialFen,
         startedAt: this.now().toISOString(),
       }),
     )
     this.leaveCurrent()
-    void this.engine()
-      .newGame()
-      .catch((error: unknown) => this.log('The engine could not start a new game', error))
+    this.opponents[game.opponent].newGame?.()
     this.take(game)
     return this.changed()
   }
@@ -123,7 +115,7 @@ export class GameService {
   move(input: MoveInput): GameChange {
     const game = this.game
     if (!game) return NO_GAME
-    if (this.engineThinking) return { ok: false, error: 'The engine is still choosing its move' }
+    if (this.reply) return { ok: false, error: 'Your opponent is still choosing its move' }
     const played = game.play(input, game.playerColor)
     if (!played.ok) return played
     this.store.save(game.record())
@@ -139,10 +131,10 @@ export class GameService {
     return this.finish((game) => game.abandon())
   }
 
-  /** Asks the engine for its move again, after it failed. */
-  retryEngine(): GameChange {
+  /** Asks the opponent for its move again, after it failed. */
+  retryOpponent(): GameChange {
     if (!this.game) return NO_GAME
-    this.engineFailed = false
+    this.opponentFailed = false
     this.afterChange()
     return this.changed()
   }
@@ -168,8 +160,7 @@ export class GameService {
     if (!game) return NO_GAME
     if (game.isOver) return { ok: false, error: 'The game is already over' }
     end(game)
-    this.generation++
-    this.stopEngine()
+    this.cancelReply()
     this.store.save(game.record())
     this.emit()
     return this.changed()
@@ -178,8 +169,7 @@ export class GameService {
   /** Leaves the current game for a new one: abandoned, or forgotten if no move was made. */
   private leaveCurrent(): void {
     const game = this.game
-    this.generation++
-    this.stopEngine()
+    this.cancelReply()
     if (!game || game.isOver) return
     if (game.plies === 0) {
       this.store.delete(game.id)
@@ -191,53 +181,55 @@ export class GameService {
 
   private take(game: Game): void {
     this.game = game
-    this.generation++
-    this.engineFailed = false
+    this.opponentFailed = false
     this.afterChange()
   }
 
-  /** Tells everyone, then lets the engine move if it is its turn. */
+  /** Tells everyone, then lets the opponent move if it is its turn. */
   private afterChange(): void {
     const game = this.game
-    if (game && !game.isOver && game.turn === game.engineColor && !this.engineFailed) {
-      this.engineThinking = true
-      void this.engineReply(game, this.generation)
+    if (game && !game.isOver && game.turn === game.opponentColor && !this.opponentFailed) {
+      const reply = new AbortController()
+      this.reply = reply
+      void this.opponentReply(game, reply)
     }
     this.emit()
   }
 
-  private async engineReply(game: Game, generation: number): Promise<void> {
+  private async opponentReply(game: Game, reply: AbortController): Promise<void> {
     const started = this.now().getTime()
-    const stillCurrent = () => generation === this.generation && !game.isOver
     try {
-      const uci = await this.engine().bestMove(game.fen, playSettings(game.engineLevel))
+      const uci = await this.opponents[game.opponent].chooseMove(
+        { gameId: game.id, fen: game.fen, level: game.engineLevel },
+        reply.signal,
+      )
       const waited = this.now().getTime() - started
-      if (waited < this.minEngineDelayMs) {
-        await new Promise((resolve) => setTimeout(resolve, this.minEngineDelayMs - waited))
+      if (waited < this.minReplyDelayMs) {
+        await new Promise((resolve) => setTimeout(resolve, this.minReplyDelayMs - waited))
       }
-      if (!stillCurrent()) return
+      if (reply.signal.aborted) return
       const move = uci ? parseUci(uci) : null
-      const played = move ? game.play(move, game.engineColor) : null
+      const played = move ? game.play(move, game.opponentColor) : null
       if (!played?.ok) {
-        throw new Error(`The engine chose a move that cannot be played: ${uci ?? 'none'}`)
+        throw new Error(`The opponent chose a move that cannot be played: ${uci ?? 'none'}`)
       }
       this.store.save(game.record())
     } catch (error) {
-      if (!stillCurrent()) return
-      this.log('The engine could not choose a move', error)
-      this.engineFailed = true
+      if (reply.signal.aborted) return
+      this.log('The opponent could not choose a move', error)
+      this.opponentFailed = true
     } finally {
-      if (generation === this.generation) {
-        this.engineThinking = false
+      if (this.reply === reply) {
+        this.reply = null
         this.emit()
       }
     }
   }
 
-  private stopEngine(): void {
-    if (!this.engineThinking) return
-    this.engine().stop()
-    this.engineThinking = false
+  /** Gives up on the opponent's move under way, if any; a late answer is then ignored. */
+  private cancelReply(): void {
+    this.reply?.abort()
+    this.reply = null
   }
 
   private pickColor(choice: SideChoice): Color {

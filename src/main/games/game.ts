@@ -1,5 +1,5 @@
-// One game between the player and the engine: its moves, whose turn it is, and how it ended. It
-// knows nothing of storage or of the engine; GameService does that.
+// One game between the player and their opponent: its moves, whose turn it is, and how it ended.
+// It knows nothing of storage or of who chooses the opponent's moves; GameService does that.
 import { Chess, type Move } from 'chess.js'
 import type {
   Color,
@@ -8,6 +8,7 @@ import type {
   GameStatus,
   GameSummary,
   MoveInput,
+  OpponentKind,
   PlayedMove,
   Result,
   Termination,
@@ -30,6 +31,7 @@ export interface StoredGame {
   id: number
   playerColor: Color
   engineLevel: EngineLevelId
+  opponent: OpponentKind
   initialFen: string
   startedAt: string
   endedAt?: string
@@ -50,7 +52,7 @@ export class Game {
     this.chess = new Chess(stored.initialFen)
     const { played, refused } = replay(this.chess, stored.moves)
     if (refused) {
-      throw new Error(`Game ${stored.id} has a move that cannot be played: ${refused.uci}`)
+      throw new Error(`Game ${stored.id} has a move that cannot be played: ${refused.move}`)
     }
     this.played = played.map(toPlayedMove)
     this.lastMove = played.at(-1)
@@ -70,8 +72,12 @@ export class Game {
     return this.stored.playerColor
   }
 
-  get engineColor(): Color {
+  get opponentColor(): Color {
     return otherColor(this.stored.playerColor)
+  }
+
+  get opponent(): OpponentKind {
+    return this.stored.opponent
   }
 
   get engineLevel(): EngineLevelId {
@@ -130,20 +136,23 @@ export class Game {
     return summaryOf(this.stored)
   }
 
-  state(engine: { thinking: boolean; failed: boolean }): GameState {
+  state(opponent: { thinking: boolean; failed: boolean }): GameState {
     const { moves, ...stored } = this.stored
     return {
       ...stored,
       moves: this.played.map((move) => ({ ...move })),
       position: describePosition(this.chess, this.lastMove),
-      engineThinking: engine.thinking && !this.isOver,
-      engineFailed: engine.failed && !this.isOver,
+      opponentThinking: opponent.thinking && !this.isOver,
+      opponentFailed: opponent.failed && !this.isOver,
     }
   }
 
   /** The game in PGN, the format other chess programs read. */
   pgn(): string {
-    const engine = `Stockfish (${engineLevelName(this.stored.engineLevel)})`
+    const engine =
+      this.stored.opponent === 'coach'
+        ? 'Coach (choosing from Stockfish)'
+        : `Stockfish (${engineLevelName(this.stored.engineLevel)})`
     const headers: [string, string][] = [
       ['Event', 'Training game'],
       ['Site', 'Chess Training Simulator'],

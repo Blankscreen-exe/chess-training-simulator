@@ -13,13 +13,14 @@ import { Button } from './components/ui/Button'
 import { DEFAULT_ANALYSIS_SETTINGS, useAnalysis } from './hooks/useAnalysis'
 import { useBoardView } from './hooks/useBoardView'
 import { useCoach } from './hooks/useCoach'
+import { useCoachCommands } from './hooks/useCoachCommands'
 import { useLiveGame } from './hooks/useLiveGame'
 import { useMoveKeys } from './hooks/useMoveKeys'
 import { useNotice } from './hooks/useNotice'
 import { useOrientation } from './hooks/useOrientation'
 import { useTrainerActions } from './hooks/useTrainerActions'
 import { useUnread } from './hooks/useUnread'
-import { lineArrows } from './lib/chessground'
+import { candidateArrows, lineArrows } from './lib/chessground'
 import { isAnalysable } from './state/boardView'
 
 export function App() {
@@ -41,16 +42,17 @@ export function App() {
     analysing ? position.fen : null,
     analysisSettings.lines,
   )
-  const evaluation = useMemo(
-    () =>
-      analysing
-        ? {
-            score: analysis?.lines[0]?.score ?? null,
-            arrows: analysis ? lineArrows(analysis.lines) : [],
-          }
-        : null,
-    [analysing, analysis],
+  const score = analysing ? (analysis?.lines[0]?.score ?? null) : undefined
+  // The coach's arrows show only on the position it drew them for.
+  const coachCandidates = coach?.candidates?.fen === position.fen ? coach.candidates.moves : null
+  const arrows = useMemo(
+    () => [
+      ...(analysing && analysis ? lineArrows(analysis.lines) : []),
+      ...(coachCandidates ? candidateArrows(coachCandidates) : []),
+    ],
+    [analysing, analysis, coachCandidates],
   )
+  useCoachCommands(dispatch)
 
   const actions = useTrainerActions({
     position,
@@ -117,7 +119,8 @@ export function App() {
           board={board}
           game={game}
           orientation={orientation}
-          evaluation={evaluation}
+          score={score}
+          arrows={arrows}
           notice={notice}
           notify={notify}
         />
@@ -129,7 +132,7 @@ export function App() {
               onGo={board.selectMove}
               onNewGame={() => setNewGame({})}
               onResign={() => void actions.resign()}
-              onRetryEngine={() => void actions.retryEngine()}
+              onRetryEngine={() => void actions.retryOpponent()}
               onAnalyse={() => void actions.analyseShown()}
             />
           )}

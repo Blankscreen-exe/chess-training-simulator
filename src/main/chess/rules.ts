@@ -117,20 +117,34 @@ export function tryMove(chess: Chess, move: MoveInput): Move | null {
 }
 
 /**
- * Plays a line of UCI moves on chess.js, in order, stopping at the first that is not legal. The
- * moves played are returned, and the one that stopped it, if any. `afterEach` sees each move
- * with chess.js in the position it leads to.
+ * Plays a move written in UCI ('g1f3', as the board and engine write them) or in standard
+ * notation ('Nf3', as people and Claude do), returning it, or null if it is neither or not legal.
+ */
+export function tryMoveText(chess: Chess, text: string): Move | null {
+  const trimmed = text.trim()
+  const uci = parseUci(trimmed)
+  if (uci) return tryMove(chess, uci)
+  try {
+    return chess.move(trimmed, { strict: false })
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Plays a line of moves (in UCI or standard notation) on chess.js, in order, stopping at the
+ * first that is not legal. The moves played are returned, and the one that stopped it, if any.
+ * `afterEach` sees each move with chess.js in the position it leads to.
  */
 export function replay(
   chess: Chess,
   moves: readonly string[],
   afterEach?: (move: Move) => void,
-): { played: Move[]; refused?: { index: number; uci: string } } {
+): { played: Move[]; refused?: { index: number; move: string } } {
   const played: Move[] = []
-  for (const [index, uci] of moves.entries()) {
-    const move = parseUci(uci)
-    const done = move && tryMove(chess, move)
-    if (!done) return { played, refused: { index, uci } }
+  for (const [index, text] of moves.entries()) {
+    const done = tryMoveText(chess, text)
+    if (!done) return { played, refused: { index, move: text } }
     played.push(done)
     afterEach?.(done)
   }
@@ -150,7 +164,7 @@ export function playMove(
   return { ok: true, san: played.san, position: describePosition(chess, played) }
 }
 
-/** Every position along a line of moves, or the first move that cannot be played. */
+/** Every position along a line of moves (UCI or standard notation), or the first that cannot be played. */
 export function resolveLine(fen: string, moves: readonly string[]): Result<{ steps: LineStep[] }> {
   const normalized = normalizeFen(fen)
   if (!normalized.ok) return normalized
@@ -162,7 +176,7 @@ export function resolveLine(fen: string, moves: readonly string[]): Result<{ ste
   if (refused) {
     return {
       ok: false,
-      error: `Move ${refused.index + 1}, ${refused.uci}, is not a legal move there`,
+      error: `Move ${refused.index + 1}, ${refused.move}, is not a legal move there`,
     }
   }
   return { ok: true, steps }

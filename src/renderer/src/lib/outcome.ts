@@ -34,7 +34,9 @@ export function describeEnding(ending: Ending): string {
     case 'drawn':
       return `Draw ${how}`.trim()
     case 'won':
-      return ending.termination === 'resignation' ? 'Stockfish resigned' : `You won ${how}`.trim()
+      return ending.termination === 'resignation'
+        ? 'Your opponent resigned'
+        : `You won ${how}`.trim()
     case 'lost':
       return ending.termination === 'resignation' ? 'You resigned' : `You lost ${how}`.trim()
   }

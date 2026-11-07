@@ -69,8 +69,8 @@ export function useTrainerActions(options: {
       await attempt(api.game.resign(), notify)
     },
 
-    retryEngine: async () => {
-      await attempt(api.game.retryEngine(), notify)
+    retryOpponent: async () => {
+      await attempt(api.game.retryOpponent(), notify)
     },
   }
 }

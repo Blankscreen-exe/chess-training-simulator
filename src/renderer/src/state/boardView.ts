@@ -2,7 +2,8 @@
 // by the main process; every other view is a separate layer, and leaving it puts the board back
 // on the game. All of it is pure, so it is tested without React.
 import type { GameRecord, GameState, LineStep, Position, ShownPosition } from '@shared/chess'
-import { otherColor, START_FEN } from '@shared/chess'
+import type { BoardCommand } from '@shared/coach'
+import { otherColor, shownPart, START_FEN } from '@shared/chess'
 import { splitFen, uciSquares } from '@shared/notation'
 
 export type BoardView =
@@ -18,6 +19,8 @@ export type BoardView =
       title: string
       start: ShownPosition
       steps: LineStep[]
+      /** What to say about each move as it is shown; may be shorter than `steps`. */
+      captions: string[]
       ply: number
       playing: boolean
       returnTo: BaseView
@@ -39,7 +42,13 @@ export type BoardAction =
   /** A move tried on the analysis board, replacing whatever came after the position shown. */
   | { type: 'analysis-move'; step: LineStep }
   | { type: 'open-editor'; fen: string }
-  | { type: 'open-preview'; title: string; start: ShownPosition; steps: LineStep[] }
+  | {
+      type: 'open-preview'
+      title: string
+      start: ShownPosition
+      steps: LineStep[]
+      captions?: string[]
+    }
   /** The preview's clock: the next move, or back where it came from once it has lingered. */
   | { type: 'preview-tick' }
   | { type: 'preview-toggle-play' }
@@ -74,6 +83,7 @@ export function boardReducer(view: BoardView, action: BoardAction): BoardView {
         title: action.title,
         start: action.start,
         steps: action.steps,
+        captions: action.captions ?? [],
         ply: 0,
         playing: true,
         returnTo: baseOf(view),
@@ -90,6 +100,30 @@ export function boardReducer(view: BoardView, action: BoardAction): BoardView {
     case 'leave-preview':
       return view.kind === 'preview' ? view.returnTo : view
   }
+}
+
+/** What a coach's request to the board does to it. */
+export function actionFor(command: BoardCommand): BoardAction {
+  switch (command.type) {
+    case 'preview':
+      return {
+        type: 'open-preview',
+        title: command.title,
+        start: command.start,
+        steps: command.steps,
+        captions: command.captions,
+      }
+    case 'open-analysis':
+      return { type: 'open-analysis', start: command.start }
+    case 'show-game':
+      return { type: 'show-live' }
+  }
+}
+
+/** What the coach says about the move a preview is showing, if anything. */
+export function previewCaption(view: BoardView): string | null {
+  if (view.kind !== 'preview' || view.ply === 0) return null
+  return view.captions[view.ply - 1] ?? null
 }
 
 /** The view under a preview, or the view itself. */
@@ -155,7 +189,7 @@ export function shownPosition(view: BoardView, game: GameState | null): ShownPos
       return view.steps[view.ply - 1]?.position ?? view.start
     case 'preview':
       // Shown, not played: its positions carry no moves.
-      return withoutMoves(view.steps[view.ply - 1]?.position ?? view.start)
+      return shownPart(view.steps[view.ply - 1]?.position ?? view.start)
     case 'editor':
       return { fen: view.fen, turn: 'white', check: false }
   }
@@ -180,9 +214,4 @@ export function afterPly(
 /** Whether a position carries the moves that can be made in it. */
 export function hasMoves(position: ShownPosition | Position): position is Position {
   return 'dests' in position
-}
-
-function withoutMoves(position: ShownPosition | Position): ShownPosition {
-  const { fen, turn, check, lastMove } = position
-  return lastMove ? { fen, turn, check, lastMove } : { fen, turn, check }
 }

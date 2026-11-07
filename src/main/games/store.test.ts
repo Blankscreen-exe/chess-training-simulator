@@ -1,14 +1,19 @@
-import { mkdtempSync } from 'node:fs'
-import { tmpdir } from 'node:os'
-import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { GAME_RESULTS, GAME_STATUSES, START_FEN, TERMINATIONS } from '@shared/chess'
+import { GAME_RESULTS, GAME_STATUSES, OPPONENTS, START_FEN, TERMINATIONS } from '@shared/chess'
+import { openDatabase } from '../storage/database'
 import { GameStore } from './store'
 
-const fresh = { playerColor: 'white', engineLevel: 3, initialFen: START_FEN } as const
+const fresh = {
+  playerColor: 'white',
+  engineLevel: 3,
+  opponent: 'engine',
+  initialFen: START_FEN,
+} as const
+
+const newStore = () => new GameStore(openDatabase(':memory:'))
 
 function storeWithGame() {
-  const store = new GameStore(':memory:')
+  const store = newStore()
   const game = store.create({ ...fresh, startedAt: '2026-11-07T12:00:00.000Z' })
   return { store, game }
 }
@@ -71,7 +76,7 @@ describe('GameStore', () => {
   })
 
   it('refuses a colour that is not white or black', () => {
-    const store = new GameStore(':memory:')
+    const store = newStore()
     expect(() =>
       store.create({ ...fresh, playerColor: 'green' as 'white', startedAt: '2026-11-07' }),
     ).toThrow(/CHECK constraint/)
@@ -81,6 +86,14 @@ describe('GameStore', () => {
     const { store, game } = storeWithGame()
     store.save({ ...game, status: 'paused' as 'finished' })
     expect(() => store.get(game.id)).toThrow(/not in the expected form[\s\S]*status/)
+  })
+
+  it('keeps the opponent of each game', () => {
+    const store = newStore()
+    for (const opponent of OPPONENTS) {
+      const game = store.create({ ...fresh, opponent, startedAt: '2026-11-07' })
+      expect(store.get(game.id)?.opponent).toBe(opponent)
+    }
   })
 
   it('stores every status, result and termination the app knows', () => {
@@ -93,15 +106,5 @@ describe('GameStore', () => {
         }
       }
     }
-  })
-
-  it('keeps its data between openings, without migrating twice', () => {
-    const path = join(mkdtempSync(join(tmpdir(), 'games-')), 'games.db')
-    const first = new GameStore(path)
-    const game = first.create({ ...fresh, startedAt: '2026-11-07T12:00:00.000Z' })
-    first.close()
-    const second = new GameStore(path)
-    expect(second.get(game.id)?.initialFen).toBe(START_FEN)
-    second.close()
   })
 })

@@ -1,16 +1,20 @@
 import { useState } from 'react'
 import type { GameState } from '@shared/chess'
-import { engineLevelName } from '@shared/engine-levels'
+import { opponentName } from '../../lib/opponent'
 import { describeEnding } from '../../lib/outcome'
 import { Button } from '../ui/Button'
 import { MoveList } from './MoveList'
 
 function statusOf(game: GameState): { text: string; tone: string } {
   if (game.status !== 'in_progress') return { text: describeEnding(game), tone: 'text-amber-200' }
-  if (game.engineFailed) {
-    return { text: 'The engine stopped before choosing its move.', tone: 'text-red-300' }
+  if (game.opponentFailed) {
+    return { text: 'Your opponent stopped before choosing its move.', tone: 'text-red-300' }
   }
-  if (game.engineThinking) return { text: 'Stockfish is thinking…', tone: 'text-stone-100' }
+  if (game.opponentThinking) {
+    const thinking =
+      game.opponent === 'coach' ? 'Your coach is choosing a move…' : 'Stockfish is thinking…'
+    return { text: thinking, tone: 'text-stone-100' }
+  }
   return {
     text: game.position.check ? 'Your move — you are in check' : 'Your move',
     tone: 'text-stone-100',
@@ -55,13 +59,12 @@ export function GamePanel({
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="space-y-1 border-b border-stone-800 px-4 py-3">
         <p className="text-xs text-stone-500">
-          You play {game.playerColor === 'white' ? 'White' : 'Black'} against Stockfish,{' '}
-          {engineLevelName(game.engineLevel)}
+          You play {game.playerColor === 'white' ? 'White' : 'Black'} against {opponentName(game)}
         </p>
         <p className={`text-sm font-medium ${status.tone}`} aria-live="polite">
           {status.text}
         </p>
-        {game.engineFailed && <Button onClick={onRetryEngine}>Try again</Button>}
+        {game.opponentFailed && <Button onClick={onRetryEngine}>Try again</Button>}
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto px-3 py-2">

@@ -2,22 +2,40 @@
 // things change.
 import { join } from 'node:path'
 import { app } from 'electron'
-import { DEFAULT_COACH_PORT } from '@shared/coach'
+import { z } from 'zod'
+import {
+  COACHING_MODES,
+  DEFAULT_COACH_PORT,
+  DEFAULT_COACH_SETTINGS,
+  PLAYER_LEVELS,
+} from '@shared/coach'
 import type { IpcEvent, IpcEvents } from '@shared/ipc'
 import { AnalysisService } from './analysis/service'
 import { appInfo } from './app-info'
 import { describeFen, playMove, resolveLine } from './chess/rules'
-import { CoachHub } from './coach/hub'
+import { CoachAnalyst } from './coach/analyst'
+import { CoachHub, type SettingsKeeper } from './coach/hub'
+import { CoachOpponent } from './coach/opponent'
 import { startCoachServer, type CoachServer } from './coach/server'
+import { CoachSession } from './coach/session'
+import { engineOpponent } from './engine/opponent'
 import { EngineSlot } from './engine/slot'
 import { utilityTransport } from './engine/utility-transport'
 import { GameService } from './games/service'
 import { GameStore } from './games/store'
 import type { IpcHandlers } from './ipc/register'
+import { openDatabase } from './storage/database'
+import { SettingsStore } from './storage/settings'
 
 const DATABASE_FILE = 'games.db'
 /** How often the coach's connection is re-checked, as it lapses with time alone. */
 const COACH_CHECK_MS = 5_000
+const COACH_SETTINGS_KEY = 'coach'
+
+const CoachSettingsSchema = z.object({
+  mode: z.enum(COACHING_MODES),
+  playerLevel: z.enum(PLAYER_LEVELS),
+})
 
 /** Sends an event to every page of the app. */
 export type Broadcast = <E extends IpcEvent>(event: E, payload: IpcEvents[E]) => void
@@ -35,29 +53,47 @@ function coachPort(): number {
 }
 
 export function startServices(broadcast: Broadcast): Services {
-  const store = new GameStore(join(app.getPath('userData'), DATABASE_FILE))
-  // Two engines, so analysing a position never waits on, or changes the strength of, the one
-  // playing the game.
-  const opponent = new EngineSlot(() => utilityTransport('Stockfish (opponent)'))
-  const analyst = new EngineSlot(() => utilityTransport('Stockfish (analysis)'))
+  const log = (message: string, error?: unknown) => console.error(message, error)
+  const db = openDatabase(join(app.getPath('userData'), DATABASE_FILE))
+  const settings = new SettingsStore(db)
+  const keeper: SettingsKeeper = {
+    load: () => settings.get(COACH_SETTINGS_KEY, CoachSettingsSchema, DEFAULT_COACH_SETTINGS),
+    save: (value) => settings.set(COACH_SETTINGS_KEY, value),
+  }
 
-  const games = new GameService({ store, engine: () => opponent.get() })
-  const analysis = new AnalysisService(() => analyst.get())
-  const coach = new CoachHub({ port: coachPort() })
+  // Three engines, so that playing, the analysis panel and the coach never wait on, or change
+  // the settings of, one another.
+  const opponentEngine = new EngineSlot(() => utilityTransport('Stockfish (opponent)'))
+  const panelEngine = new EngineSlot(() => utilityTransport('Stockfish (analysis)'))
+  const coachEngine = new EngineSlot(() => utilityTransport('Stockfish (coach)'))
+
+  const coach = new CoachHub({ port: coachPort(), settings: keeper })
+  const analyst = new CoachAnalyst(() => coachEngine.get())
+  const session = new CoachSession(coach, analyst, log)
+  const stockfish = engineOpponent(() => opponentEngine.get(), log)
+  const coachOpponent = new CoachOpponent(coach, analyst, stockfish)
+
+  const games = new GameService({
+    store: new GameStore(db),
+    opponents: { engine: stockfish, coach: coachOpponent },
+    log,
+  })
+  const analysis = new AnalysisService(() => panelEngine.get())
 
   games.onChange((state) => {
-    coach.gameChanged(state)
+    session.gameChanged(state)
     broadcast('game:state', state)
   })
   coach.onChange((state) => broadcast('coach:state', state))
+  coach.onBoardCommand((command) => broadcast('coach:board', command))
   const coachCheck = setInterval(() => coach.refresh(), COACH_CHECK_MS)
 
   let coachServer: CoachServer | null = null
   startCoachServer({
     port: coachPort(),
     version: app.getVersion(),
-    hub: coach,
-    currentGame: () => games.current(),
+    context: { hub: coach, session, analyst, opponent: coachOpponent, games },
+    log,
   }).then(
     (server) => {
       coachServer = server
@@ -79,7 +115,7 @@ export function startServices(broadcast: Broadcast): Services {
     'game:move': (move) => games.move(move),
     'game:resign': () => games.resign(),
     'game:abandon': () => games.abandon(),
-    'game:retry-engine': () => games.retryEngine(),
+    'game:retry-opponent': () => games.retryOpponent(),
     'games:list': () => games.list(),
     'games:get': (id) => games.record(id),
     'position:describe': (fen) => describeFen(fen),
@@ -88,6 +124,10 @@ export function startServices(broadcast: Broadcast): Services {
     'analysis:run': (request) => analysis.analyse(request),
     'coach:get': () => coach.state(),
     'coach:send': (text) => coach.playerMessage(text),
+    'coach:set-settings': (change) => {
+      coach.updateSettings(change, 'player')
+      return coach.state()
+    },
   }
 
   return {
@@ -96,9 +136,10 @@ export function startServices(broadcast: Broadcast): Services {
     async close() {
       clearInterval(coachCheck)
       await coachServer?.close()
-      opponent.close()
-      analyst.close()
-      store.close()
+      opponentEngine.close()
+      panelEngine.close()
+      coachEngine.close()
+      db.close()
     },
   }
 }

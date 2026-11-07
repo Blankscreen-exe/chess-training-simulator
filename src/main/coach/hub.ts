@@ -1,11 +1,19 @@
-// Where the player and the coach meet. The player's messages and the game's events queue here
+// Where the player and the coach meet. The player's messages and the session's events queue here
 // until Claude, waiting in wait_for_event, collects them; Claude's replies come back through say.
-// It also keeps track of whether Claude Code is listening, from how recently it was in touch.
-import type { GameState, Result } from '@shared/chess'
-import type { ChatMessage, CoachState, CoachStatus } from '@shared/coach'
+// It also keeps the coach's settings and what it is showing on the board, and tracks whether
+// Claude Code is listening, from how recently it was in touch.
+import type { Result } from '@shared/chess'
+import type {
+  BoardCommand,
+  Candidates,
+  ChatMessage,
+  CoachSettings,
+  CoachState,
+  CoachStatus,
+} from '@shared/coach'
 import { MAX_CHAT_LENGTH } from '@shared/coach'
 import { Listeners } from '../util/listeners'
-import { gameEvents, type CoachEvent } from './events'
+import type { CoachEvent } from './events'
 
 export interface CoachTimings {
   /** The longest one wait_for_event call waits before coming back empty. */
@@ -27,8 +35,15 @@ const MAX_QUEUED_EVENTS = 100
 
 export type WaitResult = { events: CoachEvent[] } | { paused: true }
 
+/** Where the coach's settings are kept between runs of the app. */
+export interface SettingsKeeper {
+  load(): CoachSettings
+  save(settings: CoachSettings): void
+}
+
 export interface CoachHubOptions {
   port: number
+  settings: SettingsKeeper
   timings?: CoachTimings
   now?: () => number
 }
@@ -41,16 +56,21 @@ export class CoachHub {
   private lastActivity: number
   private paused = false
   private problem: string | undefined
-  private lastGame: GameState | null = null
+  private settings: CoachSettings
+  private candidates: Candidates | null = null
   private lastStatus: CoachStatus
   private nextMessageId = 1
   private readonly changes = new Listeners<CoachState>()
+  private readonly commands = new Listeners<BoardCommand>()
   private readonly port: number
+  private readonly keeper: SettingsKeeper
   private readonly timings: CoachTimings
   private readonly now: () => number
 
   constructor(options: CoachHubOptions) {
     this.port = options.port
+    this.keeper = options.settings
+    this.settings = options.settings.load()
     this.timings = options.timings ?? COACH_TIMINGS
     this.now = options.now ?? Date.now
     this.lastActivity = this.now()
@@ -62,14 +82,30 @@ export class CoachHub {
     return this.changes.add(listener)
   }
 
+  /** Calls `listener` with each thing the coach asks the board to do. */
+  onBoardCommand(listener: (command: BoardCommand) => void): () => void {
+    return this.commands.add(listener)
+  }
+
   state(): CoachState {
     const state: CoachState = {
       status: this.status(),
       port: this.port,
+      settings: { ...this.settings },
       messages: this.messages.map((message) => ({ ...message })),
+      candidates: this.candidates,
     }
     if (this.problem) state.problem = this.problem
     return state
+  }
+
+  get currentSettings(): CoachSettings {
+    return { ...this.settings }
+  }
+
+  /** Whether Claude Code is listening, so that events sent now will be heard. */
+  get connected(): boolean {
+    return this.status() === 'connected'
   }
 
   /** The server could not start; the coach cannot connect until the app is restarted. */
@@ -93,6 +129,11 @@ export class CoachHub {
     this.emitIfStatusChanged()
   }
 
+  /** The player did something, so the coach should not yet give up waiting for them. */
+  noteActivity(): void {
+    this.lastActivity = this.now()
+  }
+
   // From the player.
 
   playerMessage(text: string): Result<{ message: ChatMessage }> {
@@ -102,22 +143,45 @@ export class CoachHub {
       return { ok: false, error: `Messages can be at most ${MAX_CHAT_LENGTH} characters` }
     }
     const message = this.addMessage('player', trimmed)
-    this.lastActivity = this.now()
+    this.noteActivity()
+    // Kept even while no coach is listening, for it to read when it connects.
     this.enqueue([{ type: 'player_message', text: trimmed }])
     this.emit()
     return { ok: true, message }
   }
 
-  /** The game changed; Claude hears what happened, if it is listening. */
-  gameChanged(state: GameState | null): void {
-    const events = gameEvents(this.lastGame, state)
-    this.lastGame = state
-    if (events.length === 0) return
-    if (events.some((event) => event.type !== 'move' || event.by === 'player')) {
-      this.lastActivity = this.now()
+  /**
+   * Changes the coach's settings, and keeps them. A change the player makes in the app is passed
+   * on to Claude; one Claude makes, it already knows about.
+   */
+  updateSettings(change: Partial<CoachSettings>, by: 'player' | 'coach'): CoachSettings {
+    const before = this.settings
+    this.settings = { ...before, ...change }
+    this.keeper.save(this.settings)
+    if (by === 'player' && this.settings.mode !== before.mode) {
+      this.deliver([{ type: 'mode_changed', mode: this.settings.mode }])
     }
-    // Moves made while no coach was listening would be stale by the time one connects.
-    if (this.status() === 'connected') this.enqueue(events)
+    this.emit()
+    return { ...this.settings }
+  }
+
+  // From the session and the tools.
+
+  /** Passes events on to Claude, if it is listening; events nobody hears would go stale. */
+  deliver(events: CoachEvent[]): void {
+    if (events.length > 0 && this.connected) this.enqueue(events)
+  }
+
+  /** Shows these moves on the board as numbered arrows, or none. */
+  setCandidates(candidates: Candidates | null): void {
+    if (candidates === null && this.candidates === null) return
+    this.candidates = candidates
+    this.emit()
+  }
+
+  /** Asks the board to do something once, such as playing a line out. */
+  command(command: BoardCommand): void {
+    this.commands.emit(command)
   }
 
   // From Claude.
@@ -180,8 +244,9 @@ export class CoachHub {
 
   private enqueue(events: CoachEvent[]): void {
     this.queue.push(...events)
-    if (this.queue.length > MAX_QUEUED_EVENTS)
+    if (this.queue.length > MAX_QUEUED_EVENTS) {
       this.queue.splice(0, this.queue.length - MAX_QUEUED_EVENTS)
+    }
     this.waiter?.(this.drain())
   }
 

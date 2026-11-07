@@ -1,11 +1,19 @@
 import { useEffect, useRef, useState } from 'react'
-import type { NewGameOptions, SideChoice } from '@shared/chess'
-import { SIDE_CHOICES, START_FEN } from '@shared/chess'
+import type { NewGameOptions, OpponentKind, SideChoice } from '@shared/chess'
+import { OPPONENTS, SIDE_CHOICES, START_FEN } from '@shared/chess'
 import { ENGINE_LEVELS, engineLevelDescription, engineLevelName } from '@shared/engine-levels'
 import { loadNewGameChoices, saveNewGameChoices } from '../lib/preferences'
 import { Button } from './ui/Button'
 
 const SIDE_LABELS: Record<SideChoice, string> = { white: 'White', random: 'Random', black: 'Black' }
+
+const OPPONENT_LABELS: Record<OpponentKind, { name: string; detail: string }> = {
+  engine: { name: 'Stockfish', detail: 'At the strength chosen above' },
+  coach: {
+    name: 'Your coach',
+    detail: "Chooses each move from Stockfish's best, to suit you; Stockfish plays if it is away",
+  },
+}
 
 /** Choosing a side, the engine's strength and where to start. */
 export function NewGameDialog({
@@ -101,6 +109,26 @@ export function NewGameDialog({
               </label>
             ))}
           </div>
+        </fieldset>
+
+        <fieldset className="space-y-2">
+          <legend className="mb-2 text-sm text-stone-400">Your opponent</legend>
+          {OPPONENTS.map((opponent) => (
+            <label key={opponent} className="flex items-start gap-2 text-sm">
+              <input
+                type="radio"
+                className="mt-0.5 accent-amber-500"
+                checked={choices.opponent === opponent}
+                onChange={() => setChoices({ ...choices, opponent })}
+              />
+              <span>
+                {OPPONENT_LABELS[opponent].name}
+                <span className="block text-xs text-stone-500">
+                  {OPPONENT_LABELS[opponent].detail}
+                </span>
+              </span>
+            </label>
+          ))}
         </fieldset>
 
         <fieldset className="space-y-2">

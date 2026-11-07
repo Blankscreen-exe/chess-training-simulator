@@ -73,13 +73,9 @@ export class Engine {
   analyse(fen: string, options: AnalysisOptions): Promise<EngineAnalysis | null> {
     return this.exclusive(async () => {
       if (options.stillWanted && !options.stillWanted()) return null
-      const { infos } = await this.search(
-        fen,
-        Math.max(1, options.lines),
-        FULL_STRENGTH,
-        options.limits,
-      )
-      const lines = [...infos.values()].sort((a, b) => a.multipv - b.multipv)
+      const count = Math.max(1, options.lines)
+      const { infos } = await this.search(fen, count, FULL_STRENGTH, options.limits)
+      const lines = rankLines(infos.values(), count)
       const depth = lines.length > 0 ? Math.min(...lines.map((line) => line.depth)) : 0
       return { depth, lines }
     })
@@ -121,7 +117,7 @@ export class Engine {
     multipv: number,
     strength: Strength,
     limits: SearchLimits,
-  ): Promise<{ bestMove: string | null; infos: Map<number, UciInfo> }> {
+  ): Promise<{ bestMove: string | null; infos: Map<string, UciInfo> }> {
     this.transport.send(`setoption name MultiPV value ${multipv}`)
     this.transport.send(`setoption name UCI_LimitStrength value ${strength.limitStrength}`)
     if (strength.elo !== undefined)
@@ -129,13 +125,16 @@ export class Engine {
     this.transport.send(`setoption name Skill Level value ${strength.skill}`)
     await this.sync()
 
-    const infos = new Map<number, UciInfo>()
+    // The latest line for each first move. Keyed by move, not by rank: ranks are reported depth
+    // by depth, and a move can change rank between depths, so keying by rank could list it twice.
+    const infos = new Map<string, UciInfo>()
     this.searching = true
     try {
       const last = await this.request([`position fen ${fen}`, goCommand(limits)], (line) => {
         const info = parseInfo(line)
+        const move = info?.pv[0]
         // A bound is a guess made mid-search; keep it only until a real score arrives.
-        if (info && !(info.bound && infos.has(info.multipv))) infos.set(info.multipv, info)
+        if (info && move && !(info.bound && infos.has(move))) infos.set(move, info)
         return parseBestMove(line) !== undefined
       })
       return { bestMove: parseBestMove(last) ?? null, infos }
@@ -183,6 +182,17 @@ export class Engine {
     this.queue = run.catch(() => undefined)
     return run
   }
+}
+
+/**
+ * The best `count` lines, one per first move, ranked from 1: the deepest first, and by the
+ * engine's own ranking among those of the same depth.
+ */
+export function rankLines(infos: Iterable<UciInfo>, count: number): UciInfo[] {
+  return [...infos]
+    .sort((a, b) => b.depth - a.depth || a.multipv - b.multipv)
+    .slice(0, count)
+    .map((info, index) => ({ ...info, multipv: index + 1 }))
 }
 
 /** The UCI command that starts a search within `limits`. */

@@ -10,8 +10,10 @@ Stockfish plays and judges the chess; Claude never acts as the engine.
 **Status:** early. You can play Stockfish at eight strengths from the start or from a position
 you set up, see its best lines with arrows and watch them played out, try moves on an analysis
 board, and step back through your games, which are kept on your computer. Claude connects and
-talks with you in the app, and follows the game; its coaching tools (the engine's view, showing
-moves on the board) come next. See [the plan](docs/plan.md).
+coaches you in the app: it shows your options before a move as numbered arrows, tells you how
+each move went, plays lines out on the board, sets up positions to study, and can play you
+itself, choosing from Stockfish's best moves. Puzzles, openings and reviews come next; see
+[the plan](docs/plan.md).
 
 ## Connecting the coach
 
@@ -30,6 +32,19 @@ computer can reach and which refuses requests from web pages.
 3. Approve the `chess-coach` server, and allow its tools when asked, or all at once with
    `/permissions` and the rule `mcp__chess-coach`.
 4. Say "let's train". The Coach tab in the app shows it connected, and you chat with it there.
+
+In the Coach tab, choose how closely it coaches:
+
+| Mode          | What the coach does                                              |
+| ------------- | ---------------------------------------------------------------- |
+| Guided        | Shows your options before each move, and says how each move went |
+| Casual        | Describes your options, and never judges the moves you make      |
+| Blunder watch | Speaks up only when you make a mistake                           |
+| Silent        | Says nothing about the game unless you ask                       |
+
+You can also ask in the chat: "show me a trick with the bishop", "what happens if my rook goes to
+e7?", "let's start another game", "play me yourself". Every chess fact the coach gives comes from
+Stockfish, through the app; it never judges a position on its own.
 
 Claude waits for you through a tool call that returns every 40 seconds or so; each return is a
 small turn on your plan. After ten quiet minutes it stops waiting, and the app shows the coach as
@@ -76,8 +91,10 @@ through one typed contract.
 | `src/main/analysis` | The engine's best lines for a position                                                                                           |
 | `src/main/coach`    | The coach's MCP server: who may connect, its tools and instructions, and the chat and events it passes between player and Claude |
 | `src/main/ipc`      | Checking every request from the page against a schema, and answering it                                                          |
+| `src/main/storage`  | The SQLite database, its migrations, and settings                                                                                |
 | `src/preload`       | `window.api`, built from the contract                                                                                            |
 | `src/renderer/src`  | The React app: `state` (what the board shows, as a reducer), `hooks`, `components`, and `lib` (pure helpers)                     |
+| `src/test-support`  | Building blocks for tests, such as games played with chess.js                                                                    |
 
 Adding a request from the page means three edits, each checked by the compiler: the channel in
 `src/shared/ipc.ts`, its argument schema in `src/main/ipc/schemas.ts`, and its handler in

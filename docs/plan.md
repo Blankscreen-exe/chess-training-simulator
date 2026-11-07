@@ -151,13 +151,16 @@ picking among Stockfish's best few moves, to make the game more human or to set 
 - `.mcp.json`, the `claude mcp add` command, and setup steps shown until Claude Code connects
   (only the connection itself can be seen from the app, not each step)
 
-### 3. Coaching tools and modes
+### 3. Coaching tools and modes (done)
 
 - `analyze_position`, `show_candidates`, `play_preview`, `set_position`, `new_game`, `end_game`,
-  `make_move`
-- Guided, Casual, Coach on blunder and Silent modes, switched in chat or with a toggle
-- The opponent toggle
-- Settings: level, default mode, default opponent
+  `make_move`, `set_mode`; moves accepted in standard notation or UCI
+- Guided, Casual, Blunder watch and Silent modes, switched in chat or in the Coach tab; a third
+  engine judges the player's moves by the winning chances they give away
+- The opponent toggle: Stockfish, or the coach choosing from Stockfish's best moves (Stockfish
+  plays for it if it is away or slow)
+- Settings kept in the database: coaching mode and the player's level; the new-game dialog
+  remembers side, strength and opponent
 
 ### 4. Training content
 

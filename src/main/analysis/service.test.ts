@@ -2,7 +2,8 @@
 import { afterAll, describe, expect, it } from 'vitest'
 import { Engine } from '../engine/engine'
 import { inProcessTransport } from '../engine/in-process-transport'
-import { AnalysisService, fromWhite } from './service'
+import { fromWhite } from './evaluation'
+import { AnalysisService } from './service'
 
 const engine = new Engine(inProcessTransport())
 afterAll(() => engine.close())
