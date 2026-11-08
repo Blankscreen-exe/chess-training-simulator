@@ -10,7 +10,6 @@ import {
   PLAYER_LEVELS,
 } from '@shared/coach'
 import type { IpcEvent, IpcEvents } from '@shared/ipc'
-import { PUZZLE_RATINGS } from '@shared/training'
 import { AnalysisService } from './analysis/service'
 import { appInfo } from './app-info'
 import { describeFen, playMove, resolveLine } from './chess/rules'
@@ -26,8 +25,13 @@ import { GameService } from './games/service'
 import { GameStore } from './games/store'
 import type { IpcHandlers } from './ipc/register'
 import { LibraryService } from './library/service'
+import { PracticeStore } from './profile/practice'
+import { ProfileService } from './profile/service'
+import { WeaknessStore } from './profile/weaknesses'
 import { AttemptStore } from './puzzles/attempts'
 import { PuzzleService } from './puzzles/service'
+import { ReviewService } from './reviews/service'
+import { ReviewStore } from './reviews/store'
 import { openDatabase } from './storage/database'
 import { SettingsStore } from './storage/settings'
 
@@ -66,11 +70,12 @@ export function startServices(broadcast: Broadcast): Services {
     save: (value) => settings.set(COACH_SETTINGS_KEY, value),
   }
 
-  // Three engines, so that playing, the analysis panel and the coach never wait on, or change
-  // the settings of, one another.
+  // Four engines, so that playing, the analysis panel, the coach and reviewing games never wait
+  // on, or change the settings of, one another. Each starts when first needed.
   const opponentEngine = new EngineSlot(() => utilityTransport('Stockfish (opponent)'))
   const panelEngine = new EngineSlot(() => utilityTransport('Stockfish (analysis)'))
   const coachEngine = new EngineSlot(() => utilityTransport('Stockfish (coach)'))
+  const reviewEngine = new EngineSlot(() => utilityTransport('Stockfish (reviews)'))
 
   const coach = new CoachHub({ port: coachPort(), settings: keeper })
   const analyst = new CoachAnalyst(() => coachEngine.get())
@@ -78,8 +83,9 @@ export function startServices(broadcast: Broadcast): Services {
   const stockfish = engineOpponent(() => opponentEngine.get(), log)
   const coachOpponent = new CoachOpponent(coach, analyst, stockfish)
 
+  const gameStore = new GameStore(db)
   const games = new GameService({
-    store: new GameStore(db),
+    store: gameStore,
     opponents: { engine: stockfish, coach: coachOpponent },
     log,
   })
@@ -90,30 +96,66 @@ export function startServices(broadcast: Broadcast): Services {
     fetch: (url, init) => net.fetch(url, init),
     log,
   })
+  const attempts = new AttemptStore(db)
+  const practice = new PracticeStore(db)
+  const reviewStore = new ReviewStore(db)
+  const profile = new ProfileService({
+    attempts,
+    games: gameStore,
+    reviews: reviewStore,
+    weaknesses: new WeaknessStore(db),
+    practice,
+    level: () => coach.currentSettings.playerLevel,
+  })
+  const reviews = new ReviewService({
+    store: reviewStore,
+    games,
+    library,
+    analyst: new CoachAnalyst(() => reviewEngine.get()),
+    practice,
+    log,
+  })
   const puzzles = new PuzzleService({
     library,
-    attempts: new AttemptStore(db),
-    ratings: () => PUZZLE_RATINGS[coach.currentSettings.playerLevel],
+    attempts,
+    practice,
+    ratings: () => profile.puzzleRatings(),
+    weakSpots: () => profile.weakSpots(),
   })
 
   games.onChange((state) => {
     session.gameChanged(state)
+    reviews.gameChanged(state)
     broadcast('game:state', state)
   })
   puzzles.onChange((state) => {
     session.puzzleChanged(state, puzzles.answer() ?? [])
     broadcast('puzzle:state', state)
   })
+  puzzles.onTryEnded(() => profile.changed())
+  reviews.onReviewed(() => profile.changed())
+  profile.onChange((state) => broadcast('profile:state', state))
   library.onChange((state) => broadcast('library:state', state))
   coach.onChange((state) => broadcast('coach:state', state))
   coach.onBoardCommand((command) => broadcast('coach:board', command))
   const coachCheck = setInterval(() => coach.refresh(), COACH_CHECK_MS)
+  reviews.catchUp()
 
   let coachServer: CoachServer | null = null
   startCoachServer({
     port: coachPort(),
     version: app.getVersion(),
-    context: { hub: coach, session, analyst, opponent: coachOpponent, games, library, puzzles },
+    context: {
+      hub: coach,
+      session,
+      analyst,
+      opponent: coachOpponent,
+      games,
+      library,
+      puzzles,
+      reviews,
+      profile,
+    },
     log,
   }).then(
     (server) => {
@@ -162,6 +204,8 @@ export function startServices(broadcast: Broadcast): Services {
       puzzles.close()
       return null
     },
+    'profile:get': () => profile.profile(),
+    'profile:forget-weakness': (id) => profile.forgetWeakness(id),
   }
 
   return {
@@ -173,6 +217,7 @@ export function startServices(broadcast: Broadcast): Services {
       opponentEngine.close()
       panelEngine.close()
       coachEngine.close()
+      reviewEngine.close()
       // A puzzle still being solved is noted as left.
       puzzles.close()
       library.close()

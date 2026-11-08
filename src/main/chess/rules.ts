@@ -190,6 +190,15 @@ export function sanLine(fen: string, moves: readonly string[]): string[] {
   return replay(new Chess(fen), moves).played.map((move) => move.san)
 }
 
+/** The position before the `ply`th move (from 1) of moves played from `start`, if there is one. */
+export function fenBefore(
+  start: string,
+  moves: readonly Pick<PlayedMove, 'fenAfter'>[],
+  ply: number,
+): string | undefined {
+  return ply === 1 ? start : moves[ply - 2]?.fenAfter
+}
+
 /** How the game has ended by the rules, or null while it goes on. */
 export function outcome(chess: Chess): { result: GameResult; termination: Termination } | null {
   if (chess.isCheckmate()) {

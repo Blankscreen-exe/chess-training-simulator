@@ -23,7 +23,7 @@ export function Tabs<T extends string>({
             aria-selected={current === tab.id}
             aria-label={isMarked ? `${tab.label}, something new` : tab.label}
             onClick={() => onChange(tab.id)}
-            className={`relative flex-1 px-3 py-2.5 text-sm font-medium ${
+            className={`relative flex-1 px-1.5 py-2.5 text-sm font-medium ${
               current === tab.id
                 ? 'border-b-2 border-amber-500 text-stone-100'
                 : 'text-stone-400 hover:text-stone-200'

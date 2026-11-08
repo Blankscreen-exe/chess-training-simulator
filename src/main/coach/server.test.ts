@@ -16,8 +16,13 @@ import { GameService } from '../games/service'
 import { GameStore } from '../games/store'
 import { LibraryService } from '../library/service'
 import { testLibrary } from '../library/test-support'
+import { PracticeStore } from '../profile/practice'
+import { ProfileService } from '../profile/service'
+import { WeaknessStore } from '../profile/weaknesses'
 import { AttemptStore } from '../puzzles/attempts'
 import { PuzzleService } from '../puzzles/service'
+import { ReviewService } from '../reviews/service'
+import { ReviewStore } from '../reviews/store'
 import { openDatabase } from '../storage/database'
 import { CoachAnalyst } from './analyst'
 import type { CoachHub } from './hub'
@@ -42,6 +47,7 @@ let games: GameService
 let client: Client
 let library: LibraryService
 let puzzles: PuzzleService
+let profile: ProfileService
 let commands: BoardCommand[] = []
 const folder = mkdtempSync(join(tmpdir(), 'coach-server-'))
 
@@ -57,17 +63,39 @@ beforeAll(async () => {
     path: libraryPath,
     fetch: () => Promise.reject(new Error('No downloads in tests')),
   })
+  const attempts = new AttemptStore(db)
+  const practice = new PracticeStore(db)
+  const gameStore = new GameStore(db)
+  const reviewStore = new ReviewStore(db)
+  profile = new ProfileService({
+    attempts,
+    games: gameStore,
+    reviews: reviewStore,
+    weaknesses: new WeaknessStore(db),
+    practice,
+    level: () => hub.currentSettings.playerLevel,
+  })
   puzzles = new PuzzleService({
     library,
-    attempts: new AttemptStore(db),
+    attempts,
+    practice,
     ratings: () => ({ min: 1700, max: 1900 }),
+    weakSpots: () => profile.weakSpots(),
     replyDelayMs: 0,
   })
   puzzles.onChange((state) => session.puzzleChanged(state, puzzles.answer() ?? []))
   games = new GameService({
-    store: new GameStore(db),
+    store: gameStore,
     opponents: { engine: instantOpponent, coach: opponent },
     minReplyDelayMs: 0,
+    log: () => undefined,
+  })
+  const reviews = new ReviewService({
+    store: reviewStore,
+    games,
+    library,
+    analyst,
+    practice,
     log: () => undefined,
   })
   games.onChange((state) => session.gameChanged(state))
@@ -75,7 +103,7 @@ beforeAll(async () => {
   server = await startCoachServer({
     port: 0,
     version: '0.0.0-test',
-    context: { hub, session, analyst, opponent, games, library, puzzles },
+    context: { hub, session, analyst, opponent, games, library, puzzles, reviews, profile },
     log: () => undefined,
   })
   client = new Client({ name: 'test', version: '0.0.0' })
@@ -114,6 +142,8 @@ describe('the coach server', () => {
       'find_openings',
       'find_puzzles',
       'get_game_state',
+      'get_player_profile',
+      'log_weakness',
       'make_move',
       'new_game',
       'play_preview',
@@ -363,5 +393,51 @@ describe('training from the library', () => {
     expect(review.annotated_moves).toMatch(/^1\. e4 /)
     expect(Object.values(review.player_moves).reduce((a, b) => a + b)).toBe(2)
     expect(await call('review_game', { game_id: 999 })).toHaveProperty('refused')
+  })
+})
+
+describe("the player's profile", () => {
+  it('says what the app knows of the player, from their level up', async () => {
+    expect(await call('get_player_profile')).toMatchObject({
+      player_level: 'casual',
+      puzzles: { rating: null, weakest_themes: [] },
+      weaknesses: [],
+      weak_spots: [],
+      practice: { due_now: 0 },
+    })
+  })
+
+  it('notes a weakness, counts it again under the same name, and aims puzzles at it', async () => {
+    const note = { pattern: 'Misses rook tricks', theme: 'middlegame', note: '12. Re7 missed' }
+    expect(await call('log_weakness', note)).toEqual({
+      pattern: 'Misses rook tricks',
+      times_noted: 1,
+    })
+    expect(await call('log_weakness', { pattern: 'misses rook tricks' })).toEqual({
+      pattern: 'Misses rook tricks',
+      times_noted: 2,
+    })
+    expect(await call('get_player_profile')).toMatchObject({
+      weaknesses: [{ pattern: 'Misses rook tricks', theme: 'middlegame', times_noted: 2 }],
+      weak_spots: ['middlegame'],
+    })
+    const found = (await call('find_puzzles', { for_weaknesses: true, piece: 'rook' })) as {
+      puzzles: { puzzle_id: string }[]
+    }
+    expect(found.puzzles.map((p) => p.puzzle_id)).toEqual(['00008'])
+    expect(await call('log_weakness', { pattern: 'x' })).toHaveProperty('refused')
+  })
+
+  it('keeps the puzzle the player missed to practise, when it comes back', async () => {
+    // The mate in one they got wrong first, above.
+    const { practice } = (await call('get_player_profile')) as {
+      practice: { due_now: number; coming_back_later: number; next_due: string }
+    }
+    expect(practice).toMatchObject({ due_now: 0, coming_back_later: 1 })
+    expect(practice.next_due).toMatch(/^in \d+ hours$/)
+    expect(await call('start_puzzle', { practice: true })).toHaveProperty(
+      'refused',
+      `Nothing is due for practice now: the next comes back ${practice.next_due}`,
+    )
   })
 })

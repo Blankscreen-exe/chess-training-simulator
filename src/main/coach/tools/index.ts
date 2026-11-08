@@ -4,6 +4,7 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { registerBoardTools } from './board'
 import { registerConversationTools } from './conversation'
 import { registerGameTools } from './game'
+import { registerProfileTools } from './profile'
 import type { CoachContext } from './support'
 import { registerTrainingTools } from './training'
 
@@ -14,4 +15,5 @@ export function registerCoachTools(server: McpServer, context: CoachContext): vo
   registerGameTools(server, context)
   registerBoardTools(server, context)
   registerTrainingTools(server, context)
+  registerProfileTools(server, context)
 }

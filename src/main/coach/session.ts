@@ -5,6 +5,7 @@
 import type { GameState } from '@shared/chess'
 import type { CoachingMode } from '@shared/coach'
 import type { PuzzleState } from '@shared/training'
+import { fenBefore } from '../chess/rules'
 import type { PositionAnalyst } from './analyst'
 import {
   candidateMoves,
@@ -94,7 +95,7 @@ export class CoachSession {
       this.later(() => this.hub.deliver([event]))
       return
     }
-    const before = event.ply === 1 ? game.initialFen : game.moves[event.ply - 2]?.fenAfter
+    const before = fenBefore(game.initialFen, game.moves, event.ply)
     const played = game.moves[event.ply - 1]
     if (!before || !played) return
     this.later(async () => {

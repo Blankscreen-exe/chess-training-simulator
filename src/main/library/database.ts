@@ -4,6 +4,7 @@
 import { DatabaseSync, type StatementSync } from 'node:sqlite'
 import { z } from 'zod'
 import { PUZZLE_PIECES, type LibraryContents, type Opening } from '@shared/training'
+import { inTransaction } from '../storage/database'
 import type { LibraryOpening } from './openings'
 import type { LibraryPuzzle } from './puzzles'
 
@@ -65,7 +66,7 @@ export class LibraryWriter {
   }
 
   addPuzzles(puzzles: readonly LibraryPuzzle[]): void {
-    this.inTransaction(() => {
+    inTransaction(this.db, () => {
       for (const p of puzzles) {
         const { changes } = this.addPuzzle.run(
           p.id,
@@ -83,7 +84,7 @@ export class LibraryWriter {
   }
 
   addOpenings(openings: readonly LibraryOpening[]): void {
-    this.inTransaction(() => {
+    inTransaction(this.db, () => {
       for (const o of openings) this.addOpening.run(o.eco, o.name, o.moves.join(' '), o.position)
       this.openings += openings.length
     })
@@ -107,17 +108,6 @@ export class LibraryWriter {
   /** Closes the file without finishing it, so it can be deleted. */
   abandon(): void {
     if (this.db.isOpen) this.db.close()
-  }
-
-  private inTransaction(work: () => void): void {
-    this.db.exec('BEGIN')
-    try {
-      work()
-      this.db.exec('COMMIT')
-    } catch (error) {
-      this.db.exec('ROLLBACK')
-      throw error
-    }
   }
 }
 

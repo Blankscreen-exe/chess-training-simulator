@@ -2,8 +2,9 @@ import { describe, expect, it } from 'vitest'
 import { START_FEN } from '@shared/chess'
 import { puzzleState } from '@test-support/fixtures'
 import { describeEnding, playerOutcome } from './outcome'
-import { loadNewGameChoices, loadPuzzleChoices } from './preferences'
-import { puzzleHeading, puzzleProgress, puzzleThemes } from './puzzle'
+import { loadNewGameChoices, loadPuzzleChoices, WEAK_SPOTS } from './preferences'
+import { describePractice, describeRating, describeSolved, timesNoted } from './profile'
+import { practiceNote, puzzleHeading, puzzleName, puzzleProgress, puzzleThemes } from './puzzle'
 import { formatScore, whiteShare } from './score'
 import { scoreSheet } from './scoreSheet'
 
@@ -111,6 +112,10 @@ describe('loadPuzzleChoices', () => {
       piece: null,
     })
     expect(loadPuzzleChoices(storage('[1]'))).toEqual({ theme: null, piece: null })
+    expect(loadPuzzleChoices(storage('{"theme":"weak-spots"}'))).toEqual({
+      theme: WEAK_SPOTS,
+      piece: null,
+    })
   })
 })
 
@@ -118,7 +123,7 @@ describe('puzzle wording', () => {
   const puzzle = puzzleState
 
   it('says what to do, and how the player is getting on', () => {
-    expect(puzzleHeading(puzzle({}))).toBe('rated 1819 — find the best move for White')
+    expect(puzzleHeading(puzzle({}))).toBe('Puzzle rated 1819 — find the best move for White')
     expect(puzzleHeading(puzzle({ title: 'Forks, 1 of 3', status: 'solved' }))).toBe(
       'Forks, 1 of 3 — solved',
     )
@@ -131,8 +136,51 @@ describe('puzzle wording', () => {
     )
   })
 
+  it('says where a position being practised comes from, and what was played there', () => {
+    const fromGame = puzzle({
+      rating: null,
+      practice: { from: 'game', gameId: 4, played: '4. d3' },
+    })
+    expect(puzzleName(fromGame)).toBe('Practice: a position from your game')
+    expect(practiceNote(fromGame)).toBe('In the game you played 4. d3 here.')
+    const missed = puzzle({ practice: { from: 'puzzle' } })
+    expect(puzzleName(missed)).toBe('Practice: a puzzle you missed')
+    expect(practiceNote(missed)).toBeNull()
+    expect(puzzleName(puzzle({ practice: { from: 'puzzle' }, title: 'Forks' }))).toBe('Forks')
+  })
+
   it('keeps the themes back until the puzzle is over, as they give the idea away', () => {
     expect(puzzleThemes(puzzle({}))).toEqual([])
     expect(puzzleThemes(puzzle({ status: 'revealed' }))).toEqual(['Fork', 'Middlegame'])
+  })
+})
+
+describe('profile wording', () => {
+  const practice = { due: 0, waiting: 0, learned: 0, nextDue: null }
+
+  it('says what is waiting to be practised', () => {
+    expect(describePractice(practice)).toMatch(/^Puzzles you miss/)
+    expect(describePractice({ ...practice, due: 2, waiting: 3, learned: 1 })).toBe(
+      '2 positions to practise now. 3 more come back later. 1 learned.',
+    )
+    expect(describePractice({ ...practice, due: 1, waiting: 1 })).toBe(
+      '1 position to practise now. 1 more comes back later.',
+    )
+    const nextDue = new Date(2026, 10, 9, 4).toISOString()
+    expect(describePractice({ ...practice, waiting: 1, nextDue })).toMatch(
+      /^Nothing to practise now\. The next comes back on .*9.*\.$/,
+    )
+  })
+
+  it('gives the puzzle rating, or how many puzzles are left before one', () => {
+    const record = { rating: null, tries: 7, solved: 3, themes: [] }
+    expect(describeRating(record)).toBe('Not rated yet: 3 more puzzles to go.')
+    expect(describeRating({ ...record, rating: 1432 })).toBe('Puzzle rating 1432')
+    expect(describeSolved(record)).toBe('Solved first time: 3 of 7 (43%).')
+    expect(describeSolved({ ...record, tries: 0 })).toBeNull()
+  })
+
+  it('counts how often a weakness was noted in words', () => {
+    expect([1, 2, 5].map(timesNoted)).toEqual(['once', 'twice', '5 times'])
   })
 })

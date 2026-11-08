@@ -1,5 +1,5 @@
-// Training from the library: puzzles (to solve, or as examples for a lesson), openings, checking a
-// line the coach wants to show, and reviewing a game once it is over.
+// Training: puzzles from the library (to solve, or as examples for a lesson) and positions to
+// practise, openings, checking a line the coach wants to show, and reviewing a game.
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { z } from 'zod'
 import { otherColor, START_FEN } from '@shared/chess'
@@ -9,7 +9,7 @@ import { describeFen, resolveLine } from '../../chess/rules'
 import { NO_LIBRARY } from '../../puzzles/service'
 import { Puzzle } from '../../puzzles/puzzle'
 import { COACH_LIMITS } from '../analyst'
-import { annotatedLine, assessLine, evaluationOf, reviewGame } from '../review'
+import { annotatedLine, assessLine, evaluationOf } from '../lines'
 import { puzzleSnapshotOf } from '../snapshot'
 import { positionOrGame, refuse, registrarFor, reply, type CoachContext } from './support'
 
@@ -20,6 +20,12 @@ const MAX_CHECKED_MOVES = 12
 
 const puzzleFilters = {
   theme: z.enum(PUZZLE_THEMES).optional(),
+  for_weaknesses: z
+    .boolean()
+    .optional()
+    .describe(
+      "Aim at the player's weak spots, from get_player_profile: a theme is drawn from them",
+    ),
   piece: z
     .enum(PUZZLE_PIECES)
     .optional()
@@ -32,18 +38,20 @@ const puzzleFilters = {
 
 function requestOf(filters: {
   theme?: string | undefined
+  for_weaknesses?: boolean | undefined
   piece?: PuzzleRequest['piece'] | undefined
   rating?: PuzzleRequest['rating'] | undefined
 }): PuzzleRequest {
   return {
     ...(filters.theme ? { theme: filters.theme } : {}),
+    ...(filters.for_weaknesses ? { weakSpots: true } : {}),
     ...(filters.piece ? { piece: filters.piece } : {}),
     ...(filters.rating ? { rating: filters.rating } : {}),
   }
 }
 
 export function registerTrainingTools(server: McpServer, context: CoachContext): void {
-  const { hub, games, analyst, library, puzzles } = context
+  const { hub, games, analyst, library, puzzles, reviews } = context
   const register = registrarFor(server, hub)
 
   register(
@@ -86,9 +94,15 @@ export function registerTrainingTools(server: McpServer, context: CoachContext):
     'start_puzzle',
     {
       description:
-        'Put a puzzle on the board for the player to solve: a given one, or one chosen by theme, piece and rating. The app checks their moves and plays the replies; you hear how they get on through puzzle events. The answer is in the result, for hints: never give it away unless they ask.',
+        'Put a puzzle on the board for the player to solve: a given one, one chosen by theme, piece and rating, or the next of their own missed positions due for practice. The app checks their moves and plays the replies; you hear how they get on through puzzle events. The answer is in the result, for hints: never give it away unless they ask.',
       inputSchema: {
         puzzle_id: z.string().max(10).optional().describe('A puzzle from find_puzzles'),
+        practice: z
+          .boolean()
+          .optional()
+          .describe(
+            'The position due for practice longest ago: one the player missed before, in a puzzle or their own game',
+          ),
         ...puzzleFilters,
         title: z
           .string()
@@ -97,11 +111,9 @@ export function registerTrainingTools(server: McpServer, context: CoachContext):
           .describe('Shown with the puzzle, as "Bishop tricks, 2 of 3"'),
       },
     },
-    ({ puzzle_id, title, ...filters }) => {
-      const started = puzzles.start(
-        puzzle_id ? { id: puzzle_id } : requestOf(filters),
-        title ?? null,
-      )
+    ({ puzzle_id, practice, title, ...filters }) => {
+      const choice = practice ? { practice: true as const } : requestOf(filters)
+      const started = puzzles.start(puzzle_id ? { id: puzzle_id } : choice, title ?? null)
       if (!started.ok) return refuse(started.error)
       return reply(puzzleSnapshotOf(started.state, puzzles.answer() ?? []))
     },
@@ -210,17 +222,15 @@ export function registerTrainingTools(server: McpServer, context: CoachContext):
     'review_game',
     {
       description:
-        "The engine's review of a game: every move marked (?! inaccuracy, ? mistake, ?? blunder), how many of the player's moves were of each quality, and the turning points with the better move. A game by id from the player's history, or else the current or latest one. It takes around 20 seconds; tell the player you are looking at the game first.",
+        "The engine's review of a game: every move marked (?! inaccuracy, ? mistake, ?? blunder), how many of the player's moves were of each quality, and the turning points with the better move. A game by id from the player's history, or else the current or latest one. The app reviews each game as it ends, so this is usually ready at once; a game it has not reviewed takes up to 20 seconds, so tell the player you are looking at it first.",
       inputSchema: { game_id: z.number().int().positive().optional() },
       annotations: { readOnlyHint: true },
     },
     async ({ game_id }) => {
       const id = game_id ?? games.current()?.id ?? games.list(1)[0]?.id
       if (id === undefined) return refuse('There are no games to review yet')
-      const found = games.record(id)
-      if (!found.ok) return refuse(found.error)
-      if (found.game.moves.length === 0) return refuse('That game has no moves to review')
-      return reply(await reviewGame(found.game, analyst, library.openingOf(found.game)))
+      const reviewed = await reviews.review(id)
+      return reviewed.ok ? reply(reviewed.review) : refuse(reviewed.error)
     },
   )
 }

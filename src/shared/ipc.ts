@@ -16,7 +16,8 @@ import type {
   Result,
 } from './chess'
 import type { BoardCommand, ChatMessage, CoachSettings, CoachState } from './coach'
-import type { LibraryState, Opening, PuzzleRequest, PuzzleState } from './training'
+import type { PlayerProfile } from './profile'
+import type { LibraryState, Opening, PuzzleStart, PuzzleState } from './training'
 
 /** The app's name, version and the versions of what it runs on. */
 export interface AppInfo {
@@ -64,12 +65,14 @@ export interface IpcContract {
   /** The named opening a game is in, from every position in it as FEN, its start first. */
   'opening:of': { args: [positions: string[]]; result: Opening | null }
   'puzzle:get': { args: []; result: PuzzleState | null }
-  'puzzle:start': { args: [request: PuzzleRequest]; result: PuzzleChange }
+  'puzzle:start': { args: [start: PuzzleStart]; result: PuzzleChange }
   /** Refused, with the reason, for a move that is not the answer; the try is still counted. */
   'puzzle:move': { args: [move: MoveInput]; result: PuzzleChange }
   'puzzle:hint': { args: []; result: PuzzleChange }
   'puzzle:reveal': { args: []; result: PuzzleChange }
   'puzzle:close': { args: []; result: null }
+  'profile:get': { args: []; result: PlayerProfile }
+  'profile:forget-weakness': { args: [id: number]; result: PlayerProfile }
 }
 
 export type IpcChannel = keyof IpcContract
@@ -84,6 +87,7 @@ export interface IpcEvents {
   'coach:board': BoardCommand
   'library:state': LibraryState
   'puzzle:state': PuzzleState | null
+  'profile:state': PlayerProfile
 }
 
 export type IpcEvent = keyof IpcEvents
@@ -119,6 +123,7 @@ export const API_CHANNELS = {
     reveal: 'puzzle:reveal',
     close: 'puzzle:close',
   },
+  profile: { get: 'profile:get', forgetWeakness: 'profile:forget-weakness' },
 } as const satisfies ApiTree
 
 export type ApiOf<T> = {

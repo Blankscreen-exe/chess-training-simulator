@@ -56,9 +56,12 @@ export function saveNewGameChoices(choices: NewGameChoices, storage: Writer = lo
   storage.setItem(NEW_GAME_KEY, JSON.stringify(choices))
 }
 
+/** The theme choice that draws a theme from the player's weak spots. */
+export const WEAK_SPOTS = 'weak-spots'
+
 /** The kind of puzzle the player last asked for; null means any. */
 export interface PuzzleChoices {
-  theme: PuzzleTheme | null
+  theme: PuzzleTheme | typeof WEAK_SPOTS | null
   piece: PuzzlePiece | null
 }
 
@@ -66,7 +69,7 @@ const PUZZLE_KEY = 'puzzle'
 
 export function loadPuzzleChoices(storage: Reader = localStorage): PuzzleChoices {
   return loadFields(PUZZLE_KEY, storage, ({ theme, piece }) => ({
-    theme: isOneOf(PUZZLE_THEMES, theme) ? theme : null,
+    theme: theme === WEAK_SPOTS || isOneOf(PUZZLE_THEMES, theme) ? theme : null,
     piece: isOneOf(PUZZLE_PIECES, piece) ? piece : null,
   }))
 }

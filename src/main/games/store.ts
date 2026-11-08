@@ -2,6 +2,7 @@
 import type { DatabaseSync } from 'node:sqlite'
 import { z } from 'zod'
 import type { GameSummary } from '@shared/chess'
+import type { GamesRecord } from '@shared/profile'
 import { COLORS, GAME_RESULTS, GAME_STATUSES, OPPONENTS, TERMINATIONS } from '@shared/chess'
 import { ENGINE_LEVEL_IDS } from '@shared/engine-levels'
 import { summaryOf, type StoredGame } from './game'
@@ -34,6 +35,13 @@ const GameRow = z
     result: row.result,
     ...(row.termination !== null ? { termination: row.termination } : {}),
   }))
+
+const TallyRow = z.object({
+  won: z.number().nullable(),
+  drawn: z.number().nullable(),
+  lost: z.number().nullable(),
+  unfinished: z.number().nullable(),
+})
 
 /** What is needed to start storing a game. */
 export type NewStoredGame = Pick<
@@ -93,6 +101,30 @@ export class GameStore {
       .prepare('SELECT * FROM games ORDER BY id DESC LIMIT ?')
       .all(limit)
       .map((row) => summaryOf(this.read(row)))
+  }
+
+  /** How the games that are over ended, from the player's side. */
+  tally(): GamesRecord {
+    const row = TallyRow.parse(
+      this.db
+        .prepare(
+          `SELECT
+             SUM(status != 'abandoned' AND (result = '1-0') = (player_color = 'white')
+                 AND result IN ('1-0', '0-1')) AS won,
+             SUM(status != 'abandoned' AND result = '1/2-1/2') AS drawn,
+             SUM(status != 'abandoned' AND (result = '1-0') != (player_color = 'white')
+                 AND result IN ('1-0', '0-1')) AS lost,
+             SUM(status = 'abandoned') AS unfinished
+           FROM games WHERE status != 'in_progress'`,
+        )
+        .get(),
+    )
+    return {
+      won: row.won ?? 0,
+      drawn: row.drawn ?? 0,
+      lost: row.lost ?? 0,
+      unfinished: row.unfinished ?? 0,
+    }
   }
 
   /** Checks a row; one that does not fit means the database was changed by something else. */

@@ -1,6 +1,7 @@
 import type { InstallProgress, LibraryState } from '@shared/training'
 import { api } from '../../lib/api'
 import { Button } from '../ui/Button'
+import { Card } from '../ui/Card'
 import { ExternalLink } from '../ui/ExternalLink'
 
 const MEGABYTE = 1024 * 1024
@@ -27,9 +28,7 @@ export function LibraryCard({ library }: { library: LibraryState }) {
   const { contents, install, error } = library
 
   return (
-    <section className="space-y-2.5 rounded-md border border-stone-800 bg-stone-900/60 p-3 text-sm">
-      <h3 className="text-xs font-medium tracking-wide text-stone-400 uppercase">Library</h3>
-
+    <Card title="Library">
       {contents ? (
         <p className="text-stone-300">
           {contents.puzzles.toLocaleString()} puzzles and {contents.openings.toLocaleString()}{' '}
@@ -61,7 +60,7 @@ export function LibraryCard({ library }: { library: LibraryState }) {
           The install failed: {error}
         </p>
       )}
-    </section>
+    </Card>
   )
 }
 

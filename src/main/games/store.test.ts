@@ -69,6 +69,23 @@ describe('GameStore', () => {
     ])
   })
 
+  it("tallies how the games that are over ended, from the player's side", () => {
+    const store = newStore()
+    const ended = [
+      { playerColor: 'white', status: 'finished', result: '1-0' },
+      { playerColor: 'black', status: 'resigned', result: '0-1' },
+      { playerColor: 'black', status: 'finished', result: '1-0' },
+      { playerColor: 'white', status: 'finished', result: '1/2-1/2' },
+      { playerColor: 'white', status: 'abandoned', result: '*' },
+      { playerColor: 'white', status: 'in_progress', result: '*' },
+    ] as const
+    for (const { playerColor, status, result } of ended) {
+      const game = store.create({ ...fresh, playerColor, startedAt: '2026-11-07T12:00:00.000Z' })
+      store.save({ ...game, moves: ['e2e4'], status, result })
+    }
+    expect(store.tally()).toEqual({ won: 2, drawn: 1, lost: 1, unfinished: 1 })
+  })
+
   it('deletes games', () => {
     const { store, game } = storeWithGame()
     store.delete(game.id)

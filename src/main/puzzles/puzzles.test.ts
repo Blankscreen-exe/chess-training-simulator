@@ -3,8 +3,10 @@ import type { DatabaseSync } from 'node:sqlite'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import type { PuzzleTheme } from '@shared/training'
 import type { LibraryStore } from '../library/database'
 import { PUZZLE_ROWS, puzzlesOf, testLibrary } from '../library/test-support'
+import { dayStart, PracticeStore } from '../profile/practice'
 import { openDatabase } from '../storage/database'
 import { AttemptStore } from './attempts'
 import { Puzzle } from './puzzle'
@@ -116,12 +118,18 @@ describe('PuzzleService', () => {
   let db: DatabaseSync
   let attempts: AttemptStore
   let clock: number
+  let practice: PracticeStore
+  let weakSpots: PuzzleTheme[]
+  let ended: string[]
 
   beforeEach(() => {
     folder = mkdtempSync(join(tmpdir(), 'puzzles-'))
     library = testLibrary(join(folder, 'library.db'))
     db = openDatabase(':memory:')
     attempts = new AttemptStore(db)
+    practice = new PracticeStore(db)
+    weakSpots = []
+    ended = []
     clock = Date.parse('2026-11-08T12:00:00Z')
     vi.useFakeTimers()
   })
@@ -131,14 +139,22 @@ describe('PuzzleService', () => {
     rmSync(folder, { recursive: true, force: true })
   })
 
-  const service = () =>
-    new PuzzleService({
+  const service = () => {
+    const puzzles = new PuzzleService({
       library: { installed: library },
       attempts,
+      practice,
       ratings: () => ({ min: 1700, max: 1900 }),
+      weakSpots: () => weakSpots,
       replyDelayMs: 300,
       now: () => new Date((clock += 1000)),
+      random: () => 0,
     })
+    puzzles.onTryEnded((result) => ended.push(result))
+    return puzzles
+  }
+  /** The time the next day's practice is due by, from now. */
+  const dayAfter = () => Date.parse(dayStart(new Date(clock), 1))
 
   it("chooses a puzzle in the player's range, or as asked", () => {
     expect(service().start({})).toMatchObject({ ok: true, state: { id: '00008' } })
@@ -208,6 +224,60 @@ describe('PuzzleService', () => {
     library?.close()
     library = null
     expect(service().start({})).toEqual({ ok: false, error: NO_LIBRARY })
+  })
+
+  it("aims at the player's weak spots, trying the next when one has no puzzle", () => {
+    expect(service().start({ weakSpots: true }).ok).toBe(false)
+    weakSpots = ['zugzwang', 'endgame']
+    expect(service().start({ weakSpots: true, rating: { min: 1000, max: 2000 } })).toMatchObject({
+      state: { id: '0000D' },
+    })
+  })
+
+  it('keeps a missed puzzle to practise, and brings it back the next day', () => {
+    const puzzles = service()
+    puzzles.start({ id: '0000H' })
+    puzzles.move({ from: 'd5', to: 'd4' })
+    puzzles.move({ from: 'd5', to: 'g2' })
+    expect(ended).toEqual(['solved'])
+    expect(practice.next(new Date(clock))).toBeNull()
+    const early = puzzles.start({ practice: true })
+    expect(!early.ok && early.error).toMatch(
+      /^Nothing is due for practice now: the next comes back in \d+ hours$/,
+    )
+
+    clock = dayAfter()
+    expect(puzzles.start({ practice: true })).toMatchObject({
+      ok: true,
+      state: { id: 'puzzle:0000H', rating: 1032, practice: { from: 'puzzle' }, status: 'solving' },
+    })
+    puzzles.move({ from: 'd5', to: 'g2' })
+    // Practice is not a first try, so it is not noted with them; the position moves up a box.
+    expect(attemptRows()).toHaveLength(1)
+    expect(practice.summary(new Date(clock))).toMatchObject({ due: 0, waiting: 1 })
+    expect(practice.get(1)?.box).toBe(1)
+  })
+
+  it('does not count a position left untried in practice', () => {
+    practice.add(
+      {
+        key: 'game:4:7',
+        origin: { from: 'game', gameId: 4, played: '4. d3' },
+        fen: 'r1bqkbnr/pppp1ppp/2n5/4p2Q/2B1P3/8/PPPP1PPP/RNB1K1NR b KQkq - 3 3',
+        moves: ['g8f6', 'h5f7'],
+        rating: null,
+        themes: ['opening'],
+      },
+      new Date(clock),
+    )
+    clock = dayAfter()
+    const puzzles = service()
+    expect(puzzles.start({ practice: true })).toMatchObject({
+      state: { practice: { from: 'game', played: '4. d3' }, rating: null, solutionLength: 1 },
+    })
+    puzzles.close()
+    expect(practice.next(new Date(clock))).toMatchObject({ key: 'game:4:7', box: 0 })
+    expect(ended).toEqual(['left'])
   })
 
   function attemptRows() {

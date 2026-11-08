@@ -3,10 +3,23 @@
 // the player is told and tries again. Any move that mates is right, as Lichess counts it.
 import { Chess, type Move } from 'chess.js'
 import type { Color, MoveInput, PlayedMove, Result } from '@shared/chess'
-import type { PuzzleState, PuzzleStatus } from '@shared/training'
+import type { PracticeOrigin, PuzzleState, PuzzleStatus } from '@shared/training'
 import { parseUci, toUci, uciSquares } from '@shared/notation'
 import { colorOf, describePosition, replay, sanLine, toPlayedMove, tryMove } from '../chess/rules'
 import type { LibraryPuzzle } from '../library/puzzles'
+
+/** What a puzzle is made from: one from the library, or a position the player is practising. */
+export type PuzzleSource = Pick<LibraryPuzzle, 'id' | 'fen' | 'moves' | 'themes'> & {
+  rating: number | null
+}
+
+/** How a puzzle is presented. */
+export interface PuzzleSetting {
+  /** Where it comes from, when the coach chose it: "Bishop tricks, 2 of 3". */
+  title?: string | null
+  /** Where the position comes from, when the player is practising it. */
+  practice?: PracticeOrigin | null
+}
 
 /** Whether a move the player tried was the answer. */
 export type Attempt = 'right' | 'wrong'
@@ -24,8 +37,9 @@ export class Puzzle {
   private wrongMove: string | null = null
 
   private constructor(
-    readonly source: LibraryPuzzle,
+    readonly source: PuzzleSource,
     readonly title: string | null,
+    readonly practice: PracticeOrigin | null,
   ) {
     this.chess = new Chess(source.fen)
     this.playNext()
@@ -33,9 +47,12 @@ export class Puzzle {
   }
 
   /** The puzzle, ready for the player's first move; refused if its moves cannot be played. */
-  static start(source: LibraryPuzzle, title: string | null = null): Result<{ puzzle: Puzzle }> {
+  static start(source: PuzzleSource, setting: PuzzleSetting = {}): Result<{ puzzle: Puzzle }> {
     if (!isPlayable(source)) return { ok: false, error: `Puzzle ${source.id} cannot be played` }
-    return { ok: true, puzzle: new Puzzle(source, title) }
+    return {
+      ok: true,
+      puzzle: new Puzzle(source, setting.title ?? null, setting.practice ?? null),
+    }
   }
 
   /** The answer, after the opponent's setting move, in standard notation. */
@@ -102,6 +119,7 @@ export class Puzzle {
       rating: this.source.rating,
       themes: this.source.themes,
       title: this.title,
+      practice: this.practice,
       playerColor: this.playerColor,
       initialFen: this.source.fen,
       moves: [...this.played],
@@ -138,7 +156,7 @@ export class Puzzle {
  * Whether a puzzle's moves can all be played: the opponent's first, then the player's and the
  * opponent's in turn, ending with the player's.
  */
-function isPlayable(source: LibraryPuzzle): boolean {
+function isPlayable(source: PuzzleSource): boolean {
   if (source.moves.length < 2 || source.moves.length % 2 !== 0) return false
   try {
     return !replay(new Chess(source.fen), source.moves).refused

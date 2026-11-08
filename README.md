@@ -14,7 +14,9 @@ coaches you in the app: it shows your options before a move as numbered arrows, 
 each move went, plays lines out on the board, sets up positions to study, and can play you
 itself, choosing from Stockfish's best moves. With the library installed (Training tab), you
 solve puzzles from Lichess, Claude builds lessons from them and shows you openings, and it
-reviews your games. Your profile and spaced repetition of your mistakes come next; see
+reviews each game as it ends. The Progress tab shows your puzzle rating, the themes you find
+hard and where in your games you go wrong, and the puzzles you missed and the worst mistakes in
+your games come back to practise, spaced out over days. Installers come next; see
 [the plan](docs/plan.md).
 
 ## Connecting the coach
@@ -45,9 +47,9 @@ In the Coach tab, choose how closely it coaches:
 | Silent        | Says nothing about the game unless you ask                       |
 
 You can also ask in the chat: "show me a trick with the bishop", "what happens if my rook goes to
-e7?", "give me a puzzle", "show me a few good openings", "review that game", "let's start
-another game", "play me yourself". Every chess fact the coach gives comes from
-Stockfish, through the app; it never judges a position on its own.
+e7?", "give me a puzzle", "work on my weak spots", "let's practise my mistakes", "show me a few
+good openings", "review that game", "let's start another game", "play me yourself". Every chess
+fact the coach gives comes from Stockfish, through the app; it never judges a position on its own.
 
 Claude waits for you through a tool call that returns every 40 seconds or so; each return is a
 small turn on your plan. After ten quiet minutes it stops waiting, and the app shows the coach as
@@ -94,6 +96,8 @@ through one typed contract.
 | `src/main/analysis` | The engine's best lines for a position                                                                                           |
 | `src/main/library`  | The puzzle and openings library: reading Lichess's files, installing them, and finding puzzles and openings                      |
 | `src/main/puzzles`  | A puzzle being solved, and the player's tries at them                                                                            |
+| `src/main/reviews`  | The engine's review of each game as it ends, kept, and the positions of its worst mistakes taken to practise                     |
+| `src/main/profile`  | The player's profile: puzzle rating, themes, weaknesses, and the spaced practice of missed positions                             |
 | `src/main/coach`    | The coach's MCP server: who may connect, its tools and instructions, and the chat and events it passes between player and Claude |
 | `src/main/ipc`      | Checking every request from the page against a schema, and answering it                                                          |
 | `src/main/storage`  | The SQLite database, its migrations, and settings                                                                                |

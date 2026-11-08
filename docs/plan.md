@@ -71,7 +71,7 @@ and Claude answers with `say`. The Claude Code terminal also works.
 | `find_openings`         | Opening names and lines from the openings database                   |
 | `check_line`            | Stockfish's verdict on each move of a line Claude wants to show      |
 | `review_game`           | Every move of a game marked, and its turning points                  |
-| `get_player_profile`    | The player's level, history and weaknesses                           |
+| `get_player_profile`    | Puzzle rating, hard themes, games, weaknesses, practice due          |
 | `log_weakness`          | Records a mistake pattern for later training                         |
 | `say`                   | Writes in the coach panel                                            |
 
@@ -103,7 +103,8 @@ picking among Stockfish's best few moves, to make the game more human or to set 
   player and played through as previews.
 - **"I have this position, what do I do?"**: board editor, pasted FEN, or a description Claude
   turns into a FEN for you to confirm; then analysis.
-- **"Give me a puzzle"**: from the puzzle database, picked for the player's weaknesses.
+- **"Give me a puzzle"**: positions due for practice first, else from the puzzle database,
+  often aimed at the player's weak spots.
 - **"Show me some bishop tricks"**: a lesson made from real puzzles by theme and piece. A position
   Claude makes up itself is shown only once Stockfish confirms it works.
 - **"Let's play casually and only tell me my options"**: Casual mode.
@@ -116,8 +117,10 @@ picking among Stockfish's best few moves, to make the game more human or to set 
   player installs the library from the Training tab (about 300 MB, once), and the best of it
   kept in `library.db`, as it is too large for the repository.
 - **Openings:** the Lichess `chess-openings` dataset (CC0), installed with the puzzles.
-- **Your data:** games, puzzle tries and settings, in `games.db` under `app.getPath('userData')`,
-  apart from the library, which can be replaced without touching them.
+- **Your data:** games and their reviews, puzzle tries, positions to practise, weaknesses and
+  settings, in `games.db` under `app.getPath('userData')`, apart from the library, which can be
+  replaced without touching them. Positions to practise keep their own copy of the puzzle, so
+  they outlive a new library.
 
 ## Platforms and licence
 
@@ -183,10 +186,24 @@ picking among Stockfish's best few moves, to make the game more human or to set 
 - `review_game`: every move marked, and the turning points; a Review button once a game ends
 - The game's opening, by name, in the Game tab and for the coach
 
-### 5. The player's profile
+### 5. The player's profile (done)
 
-- `get_player_profile`, `log_weakness`; puzzles and coaching aimed at weaknesses
-- Spaced repetition of past mistakes
+- Each game is reviewed as it ends, in the background, by a fourth engine of its own, so the
+  coach never waits on it; the review is kept, so `review_game` answers at once, and games
+  that ended before reviews were kept are caught up on at start
+- A puzzle rating, an Elo estimate from first tries only (a puzzle seen before is easier),
+  given after ten; once there is one, puzzles are rated around it rather than by level
+- How the player does by theme, and where in their games (opening, middlegame, endgame) their
+  mistakes come; weak spots are the themes of the weaknesses the coach notes with
+  `log_weakness`, then the themes they solve least often. `get_player_profile`, and puzzles
+  aimed at weak spots from the coach or the Training tab
+- Practice: puzzles the player missed, and the worst mistakes in their games where one move
+  was clearly best (by 15 points of winning chances over the next), set up as puzzles. A
+  Leitner schedule brings each back after 1, 3, 7, 16 and 35 days, at the start of the
+  player's day; a miss sends it back to the start, and solving it first time from the last
+  box counts it learned
+- The Progress tab: rating, hardest and easiest themes, results, mistakes by phase, and the
+  weaknesses noted, which the player can forget
 
 ### 6. Release
 

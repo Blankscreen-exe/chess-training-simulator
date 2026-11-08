@@ -89,9 +89,21 @@ export const PUZZLE_THEME_NAMES = {
 export type PuzzleTheme = keyof typeof PUZZLE_THEME_NAMES
 export const PUZZLE_THEMES = Object.keys(PUZZLE_THEME_NAMES) as [PuzzleTheme, ...PuzzleTheme[]]
 
+/** Themes that say how long a puzzle is, not what it asks of the player. */
+const LENGTH_THEMES: ReadonlySet<PuzzleTheme> = new Set(['oneMove', 'short', 'long', 'veryLong'])
+
+/** The themes that are skills, which the player can be better or worse at. */
+export const SKILL_THEMES: readonly PuzzleTheme[] = PUZZLE_THEMES.filter(
+  (theme) => !LENGTH_THEMES.has(theme),
+)
+
+export function isPuzzleTheme(theme: string): theme is PuzzleTheme {
+  return theme in PUZZLE_THEME_NAMES
+}
+
 /** A theme's name: the app's own, or else Lichess's, spaced out ("rookEndgame" → "rook endgame"). */
 export function themeName(theme: string): string {
-  if (theme in PUZZLE_THEME_NAMES) return PUZZLE_THEME_NAMES[theme as PuzzleTheme]
+  if (isPuzzleTheme(theme)) return PUZZLE_THEME_NAMES[theme]
   const words = theme.replace(/([a-z])([A-Z0-9])/g, '$1 $2').toLowerCase()
   return words.charAt(0).toUpperCase() + words.slice(1)
 }
@@ -111,10 +123,22 @@ export const PUZZLE_RATINGS: Record<PlayerLevel, { min: number; max: number }> =
 /** What puzzle to find; anything left out is not a constraint. */
 export interface PuzzleRequest {
   theme?: string
+  /** A theme drawn from the player's weak spots, in place of `theme`. */
+  weakSpots?: boolean
   piece?: PuzzlePiece
-  /** The range of ratings; the player's level sets it if left out. */
+  /** The range of ratings; the player's puzzle rating, or else their level, sets it if left out. */
   rating?: { min: number; max: number }
 }
+
+/** What the player can start: a new puzzle, or the next of their missed positions to practise. */
+export type PuzzleStart = PuzzleRequest | { practice: true }
+
+/** Where a position being practised comes from. */
+export type PracticeOrigin =
+  /** A puzzle from the library the player missed. */
+  | { from: 'puzzle' }
+  /** A move in one of their games the engine judged a mistake, with what they played there. */
+  | { from: 'game'; gameId: number; played: string }
 
 /**
  * - `solving`: the player is finding the moves.
@@ -130,12 +154,15 @@ export type PuzzleResult = (typeof PUZZLE_RESULTS)[number]
 
 /** A puzzle on the board, as it stands. */
 export interface PuzzleState {
-  /** Lichess's id for the puzzle. */
+  /** Lichess's id for a puzzle from the library; the app's own for a position from a game. */
   id: string
-  rating: number
+  /** Its rating; null for a position from the player's game, which has none. */
+  rating: number | null
   themes: string[]
   /** Where it comes from, when the coach chose it: "Bishop tricks, 2 of 3". */
   title: string | null
+  /** Where it comes from, when it is a position the player is practising; null for a new one. */
+  practice: PracticeOrigin | null
   playerColor: Color
   /** The position before the opponent's move that sets the puzzle. */
   initialFen: string

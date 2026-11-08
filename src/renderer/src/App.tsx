@@ -4,6 +4,7 @@ import { BoardArea } from './components/board/BoardArea'
 import { BoardEditor } from './components/BoardEditor'
 import { CoachPanel } from './components/coach/CoachPanel'
 import { NewGameDialog } from './components/NewGameDialog'
+import { ProgressPanel } from './components/profile/ProgressPanel'
 import { AnalysisPanel } from './components/sidebar/AnalysisPanel'
 import { GameTab } from './components/sidebar/GameTab'
 import { HistoryPanel } from './components/sidebar/HistoryPanel'
@@ -21,6 +22,7 @@ import { useMoveKeys } from './hooks/useMoveKeys'
 import { useNotice } from './hooks/useNotice'
 import { useOpening } from './hooks/useOpening'
 import { useOrientation } from './hooks/useOrientation'
+import { useProfile } from './hooks/useProfile'
 import { usePuzzle } from './hooks/usePuzzle'
 import { useTrainerActions } from './hooks/useTrainerActions'
 import { useUnread } from './hooks/useUnread'
@@ -31,6 +33,7 @@ export function App() {
   const game = useLiveGame()
   const puzzle = usePuzzle()
   const library = useLibrary()
+  const profile = useProfile()
   const coach = useCoach()
   const board = useBoardView(game, puzzle)
   const { view, dispatch, position } = board
@@ -153,11 +156,13 @@ export function App() {
           {tab === 'training' && (
             <TrainingPanel
               library={library}
+              profile={profile}
               puzzle={puzzle}
               puzzleOnBoard={view.kind === 'puzzle'}
               onShowPuzzle={() => dispatch({ type: 'show-puzzle' })}
             />
           )}
+          {tab === 'progress' && <ProgressPanel profile={profile} />}
           {tab === 'analysis' && (
             <AnalysisPanel
               settings={analysisSettings}

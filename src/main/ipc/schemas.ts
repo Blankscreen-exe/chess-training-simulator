@@ -65,14 +65,20 @@ export const ARGUMENTS: { [C in IpcChannel]: z.ZodType<IpcArgs<C>> } = {
   'opening:of': z.tuple([z.array(fen).max(MAX_GAME_POSITIONS)]),
   'puzzle:get': none,
   'puzzle:start': z.tuple([
-    z.strictObject({
-      theme: theme.exactOptional(),
-      piece: z.enum(PUZZLE_PIECES).exactOptional(),
-      rating: z.strictObject({ min: rating, max: rating }).exactOptional(),
-    }),
+    z.union([
+      z.strictObject({ practice: z.literal(true) }),
+      z.strictObject({
+        theme: theme.exactOptional(),
+        weakSpots: z.boolean().exactOptional(),
+        piece: z.enum(PUZZLE_PIECES).exactOptional(),
+        rating: z.strictObject({ min: rating, max: rating }).exactOptional(),
+      }),
+    ]),
   ]),
   'puzzle:move': z.tuple([moveInput]),
   'puzzle:hint': none,
   'puzzle:reveal': none,
   'puzzle:close': none,
+  'profile:get': none,
+  'profile:forget-weakness': z.tuple([z.number().int().positive()]),
 }

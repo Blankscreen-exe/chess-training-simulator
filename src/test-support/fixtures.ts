@@ -60,6 +60,7 @@ export function puzzleState(overrides: Partial<PuzzleState> = {}): PuzzleState {
     rating: 1819,
     themes: ['fork', 'middlegame'],
     title: null,
+    practice: null,
     playerColor: 'white',
     initialFen: START_FEN,
     moves: [],
