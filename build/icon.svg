@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <!-- The app's icon: a pawn, for the player learning, and a speech bubble, for the coach. -->
+  <defs>
+    <linearGradient id="ground" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#292524"/>
+      <stop offset="1" stop-color="#0c0a09"/>
+    </linearGradient>
+    <linearGradient id="piece" gradientUnits="userSpaceOnUse" x1="0" y1="274" x2="0" y2="864">
+      <stop offset="0" stop-color="#fbbf24"/>
+      <stop offset="1" stop-color="#d97706"/>
+    </linearGradient>
+  </defs>
+  <rect x="32" y="32" width="960" height="960" rx="216" fill="url(#ground)"/>
+  <rect x="32" y="32" width="960" height="960" rx="216" fill="none" stroke="#44403c" stroke-width="8"/>
+  <g fill="url(#piece)">
+    <circle cx="430" cy="392" r="118"/>
+    <rect x="318" y="500" width="224" height="46" rx="23"/>
+    <path d="M362 546 C362 650 296 724 284 806 L576 806 C564 724 498 650 498 546 Z"/>
+    <rect x="232" y="796" width="396" height="68" rx="28"/>
+  </g>
+  <g>
+    <path d="M736 168 C834 168 908 236 908 322 C908 408 834 476 736 476 C712 476 690 472 670 465 L604 512 L620 440 C584 412 564 370 564 322 C564 236 638 168 736 168 Z" fill="#f5f5f4"/>
+    <circle cx="676" cy="322" r="26" fill="#1c1917"/>
+    <circle cx="736" cy="322" r="26" fill="#1c1917"/>
+    <circle cx="796" cy="322" r="26" fill="#1c1917"/>
+  </g>
+</svg>

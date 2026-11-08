@@ -12,9 +12,12 @@ export function coachUrl(port: number): string {
   return `http://127.0.0.1:${port}${COACH_PATH}`
 }
 
-/** The command that adds the coach to Claude Code for every folder. */
+/**
+ * The command that adds the coach to Claude Code for every folder: user scope, as Claude Code's
+ * own default adds a server for the folder it is run in only.
+ */
 export function addCoachCommand(port: number): string {
-  return `claude mcp add --transport http ${COACH_SERVER_NAME} ${coachUrl(port)}`
+  return `claude mcp add --transport http --scope user ${COACH_SERVER_NAME} ${coachUrl(port)}`
 }
 
 /**

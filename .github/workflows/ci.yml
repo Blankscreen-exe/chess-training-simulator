@@ -4,6 +4,13 @@ on:
   push:
     branches: [main]
   pull_request:
+  # The release workflow runs these same checks before it builds its installers.
+  workflow_call:
+    inputs:
+      checks-only:
+        description: Skip the unpacked builds, as the caller builds installers itself
+        type: boolean
+        default: false
 
 concurrency:
   group: ci-${{ github.ref }}
@@ -29,6 +36,7 @@ jobs:
   build:
     name: Build (${{ matrix.os }})
     needs: check
+    if: ${{ !inputs.checks-only }}
     strategy:
       fail-fast: false
       matrix:

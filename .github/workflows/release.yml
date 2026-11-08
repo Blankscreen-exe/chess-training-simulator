@@ -1,0 +1,71 @@
+name: Release
+
+# Pushing a tag such as v0.1.0 checks the code, builds the installers on each platform, and drafts
+# a GitHub release with them and their checksums. A person reads the draft and publishes it.
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  check:
+    name: Checks
+    uses: ./.github/workflows/ci.yml
+    with:
+      checks-only: true
+
+  package:
+    name: Installers (${{ matrix.os }})
+    needs: check
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: The tag matches the version in package.json
+        shell: bash
+        run: test "v$(node -p "require('./package.json').version")" = "$GITHUB_REF_NAME"
+      # Unsigned for now: each system warns once before the first run (see docs/install.md).
+      - run: pnpm package
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: false
+      - uses: actions/upload-artifact@v4
+        with:
+          name: installers-${{ matrix.os }}
+          path: |
+            release/*.exe
+            release/*.dmg
+            release/*.AppImage
+            release/*.deb
+          if-no-files-found: error
+
+  release:
+    name: Draft the release
+    needs: package
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: installers-*
+          path: dist
+          merge-multiple: true
+      - name: Checksums
+        working-directory: dist
+        run: sha256sum * > SHA256SUMS.txt
+      - name: Draft the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >
+          gh release create "$GITHUB_REF_NAME" dist/*
+          --draft --verify-tag --title "Chess Training Simulator ${GITHUB_REF_NAME#v}"
+          --notes-file <(node scripts/release-notes.mjs "${GITHUB_REF_NAME#v}")

@@ -6,6 +6,14 @@
   "description": "A desktop chess trainer where Claude coaches you, from your own Claude Code.",
   "license": "GPL-3.0-only",
   "author": "Blankscreen-exe",
+  "homepage": "https://github.com/Blankscreen-exe/chess-training-simulator",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Blankscreen-exe/chess-training-simulator.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Blankscreen-exe/chess-training-simulator/issues"
+  },
   "main": "out/main/index.js",
   "packageManager": "pnpm@11.7.0",
   "engines": {
@@ -18,6 +26,7 @@
     "preview": "electron-vite preview",
     "package": "pnpm build && electron-builder",
     "package:dir": "pnpm build && electron-builder --dir",
+    "icon": "electron scripts/render-icon.mjs",
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
     "lint": "eslint .",
     "format": "prettier --write .",

@@ -1,23 +1,47 @@
+<p align="center"><img src="build/icon.png" width="112" alt=""></p>
+
 # Chess Training Simulator
+
+[![CI](https://github.com/Blankscreen-exe/chess-training-simulator/actions/workflows/ci.yml/badge.svg)](https://github.com/Blankscreen-exe/chess-training-simulator/actions/workflows/ci.yml)
+[![Licence: GPL-3.0](https://img.shields.io/badge/licence-GPL--3.0-blue)](LICENSE)
 
 A desktop chess trainer where Claude coaches you: it shows you your options before a move, tells
 you what went right or wrong after it, replays "what if" lines on the board, and gives you puzzles,
 openings and reviews. Claude connects from your own Claude Code and uses your own Claude plan, so
 there is no API key, and your chats stay in Claude Code's transcripts on your computer.
 
-Stockfish plays and judges the chess; Claude never acts as the engine.
+Stockfish plays and judges the chess; Claude never acts as the engine. Every chess fact the coach
+gives comes from Stockfish, through the app's tools, and every line it makes up is checked move by
+move before you see it.
 
-**Status:** early. You can play Stockfish at eight strengths from the start or from a position
-you set up, see its best lines with arrows and watch them played out, try moves on an analysis
-board, and step back through your games, which are kept on your computer. Claude connects and
-coaches you in the app: it shows your options before a move as numbered arrows, tells you how
-each move went, plays lines out on the board, sets up positions to study, and can play you
-itself, choosing from Stockfish's best moves. With the library installed (Training tab), you
-solve puzzles from Lichess, Claude builds lessons from them and shows you openings, and it
-reviews each game as it ends. The Progress tab shows your puzzle rating, the themes you find
-hard and where in your games you go wrong, and the puzzles you missed and the worst mistakes in
-your games come back to practise, spaced out over days. Installers come next; see
-[the plan](docs/plan.md).
+For Windows, macOS and Linux. Powered by Claude; not made by Anthropic.
+
+![Playing with the coach: its options as numbered arrows, and the chat beside the board](docs/screenshots/coach.png)
+
+## What it does
+
+- **Play Stockfish** at eight strengths, from the start or from a position you set up, with its
+  best lines as arrows when you want them, and every game kept to step back through.
+- **Be coached as you like:** guided (your options before each move, and how each move went),
+  casual (your options, never a verdict), blunder watch (only your mistakes), or silent. The coach
+  plays lines out on the board, sets up positions, and can play you itself.
+- **Train:** Lichess's puzzles by theme and by the piece that wins, lessons the coach builds from
+  them, openings played through, and a review of every game once it ends.
+- **See your progress:** a puzzle rating, the themes you find hard, where in your games you go
+  wrong, and the weaknesses the coach notes, with puzzles aimed at them. Puzzles you miss, and the
+  worst mistakes in your own games, come back for you to practise, spaced out over days.
+
+| Training                                                          | Progress                                                                               |
+| ----------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
+| ![A puzzle on the board, with hints](docs/screenshots/puzzle.png) | ![Puzzle rating, themes, mistakes by phase, weaknesses](docs/screenshots/progress.png) |
+
+## Installing it
+
+Download the installer for your system from the
+[releases page](https://github.com/Blankscreen-exe/chess-training-simulator/releases). The builds
+are not signed yet, so Windows and macOS warn once before the first run;
+[docs/install.md](docs/install.md) says how to get past that, where your data is kept, and how to
+uninstall.
 
 ## Connecting the coach
 
@@ -26,15 +50,17 @@ app runs a small MCP server on your computer, at `http://127.0.0.1:8765/mcp`, wh
 computer can reach and which refuses requests from web pages.
 
 1. Start the app.
-2. In a terminal, start Claude Code in this project's folder; its `.mcp.json` points Claude Code
-   at the app. From any other folder, add the coach once:
+2. Add the coach to Claude Code, once:
 
    ```sh
-   claude mcp add --transport http chess-coach http://127.0.0.1:8765/mcp
+   claude mcp add --transport http --scope user chess-coach http://127.0.0.1:8765/mcp
    ```
 
-3. Approve the `chess-coach` server, and allow its tools when asked, or all at once with
-   `/permissions` and the rule `mcp__chess-coach`.
+   Running from source, Claude Code started in this project's folder finds it by itself, through
+   `.mcp.json`.
+
+3. Start `claude`, and allow the coach's tools when asked, or all at once with `/permissions` and
+   the rule `mcp__chess-coach`.
 4. Say "let's train". The Coach tab in the app shows it connected, and you chat with it there.
 
 In the Coach tab, choose how closely it coaches:
@@ -48,13 +74,18 @@ In the Coach tab, choose how closely it coaches:
 
 You can also ask in the chat: "show me a trick with the bishop", "what happens if my rook goes to
 e7?", "give me a puzzle", "work on my weak spots", "let's practise my mistakes", "show me a few
-good openings", "review that game", "let's start another game", "play me yourself". Every chess
-fact the coach gives comes from Stockfish, through the app; it never judges a position on its own.
+good openings", "review that game", "let's start another game", "play me yourself".
 
 Claude waits for you through a tool call that returns every 40 seconds or so; each return is a
 small turn on your plan. After ten quiet minutes it stops waiting, and the app shows the coach as
 paused; say "continue" in Claude Code to bring it back. Set `CHESS_COACH_PORT` to run the app on
-another port (and change `.mcp.json` to match).
+another port (and add the coach with that port).
+
+## Privacy
+
+Your games, progress and settings stay on your computer. The app goes online only to install
+the puzzle library, from Lichess. The coach's server answers only this computer, and your chats
+stay in Claude Code's transcripts. See [docs/install.md](docs/install.md#your-data).
 
 ## Running it from source
 
@@ -65,22 +96,32 @@ pnpm install
 pnpm dev
 ```
 
-| Command            | What it does                                               |
-| ------------------ | ---------------------------------------------------------- |
-| `pnpm dev`         | Runs the app, reloading as you change the code             |
-| `pnpm build`       | Builds the app into `out/`                                 |
-| `pnpm package`     | Builds installers for this platform into `release/`        |
-| `pnpm package:dir` | Builds an unpacked app into `release/`, without installers |
-| `pnpm test`        | Runs the tests                                             |
-| `pnpm lint`        | Checks the code with ESLint                                |
-| `pnpm typecheck`   | Checks the types                                           |
-| `pnpm format`      | Formats the code with Prettier                             |
+| Command            | What it does                                                    |
+| ------------------ | --------------------------------------------------------------- |
+| `pnpm dev`         | Runs the app, reloading as you change the code                  |
+| `pnpm build`       | Builds the app into `out/`                                      |
+| `pnpm package`     | Builds installers for this platform into `release/`             |
+| `pnpm package:dir` | Builds an unpacked app into `release/`, without installers      |
+| `pnpm test`        | Runs the tests                                                  |
+| `pnpm lint`        | Checks the code with ESLint                                     |
+| `pnpm typecheck`   | Checks the types                                                |
+| `pnpm format`      | Formats the code with Prettier                                  |
+| `pnpm icon`        | Renders `build/icon.svg` to the `build/icon.png` installers use |
 
 Every package is bundled into the app by Vite, for the main process as for the page, so all of
 them go in `devDependencies`. `dependencies` is only for a package that cannot be bundled, which
 electron-builder would then copy into the app whole; there are none. Stockfish is the exception to
 both: it runs in its own process, and `electron-builder.yml` copies just the one build of it the
 app uses.
+
+## Releasing
+
+1. Move the changes from the top of [CHANGELOG.md](CHANGELOG.md) under a section for the new
+   version, and set that version in `package.json`.
+2. Commit, then tag and push: `git tag v0.1.0 && git push origin main v0.1.0`.
+3. The [release workflow](.github/workflows/release.yml) runs the checks, builds the installers
+   on Windows, macOS and Linux, and drafts a GitHub release with them, their checksums and the
+   version's notes from the changelog. Read the draft, then publish it.
 
 ## How the code is organised
 

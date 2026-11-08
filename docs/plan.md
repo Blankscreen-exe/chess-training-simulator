@@ -36,7 +36,8 @@ The same pattern as the duel-masters project's local player:
 - The main process serves MCP tools over stateless Streamable HTTP, on `127.0.0.1` only, and
   refuses requests from other sites' pages or naming any other host.
 - The repository ships `.mcp.json`. For an installed app, onboarding shows the command
-  `claude mcp add --transport http chess-coach http://127.0.0.1:8765/mcp`.
+  `claude mcp add --transport http --scope user chess-coach http://127.0.0.1:8765/mcp` (user
+  scope, so every folder has it; Claude Code's default is the current folder only).
 - The user runs `claude`, approves `chess-coach` and allows `mcp__chess-coach`, then says something
   like "let's train".
 - The server's instructions carry the coaching rules: use the tools for every chess claim, match
@@ -205,10 +206,29 @@ picking among Stockfish's best few moves, to make the game more human or to set 
 - The Progress tab: rating, hardest and easiest themes, results, mistakes by phase, and the
   weaknesses noted, which the player can forget
 
-### 6. Release
+### 6. Release (done)
 
-- Packages for all three platforms, README, setup guide, screenshots
-- Perhaps a terminal inside the app that runs `claude`
+- An icon of the app's own (`build/icon.svg`, rendered by Electron with `pnpm icon`), and
+  installers named alike on every platform: Windows (NSIS, x64), macOS (`.dmg` for Apple silicon
+  and for Intel) and Linux (AppImage and `.deb`, x64)
+- A release workflow: a `v*` tag runs CI's checks, builds the installers on each platform,
+  and drafts a GitHub release with them, `SHA256SUMS.txt` and the version's notes from
+  `CHANGELOG.md`; a person publishes it. Builds stay unsigned for now
+- `docs/install.md`: downloads, getting past each system's first-run warning, connecting the
+  coach, where data is kept, uninstalling and troubleshooting; the README rewritten around it,
+  with screenshots
+- The coach is added with `--scope user`: Claude Code's default scope is the current folder,
+  so the command shown before did not reach other folders as it said
+- **Not done: a terminal inside the app.** It would need `node-pty`, a native module, which
+  breaks "no native modules" and needs building for each platform and Electron version; and
+  Claude Code is at its best in the player's own terminal. The app shows the one command to run
+  instead, with a copy button
+
+## After the first release
+
+- Sign the builds (an Apple Developer ID and notarisation; a Windows code-signing certificate)
+  so systems stop warning, then add automatic updates, which need signed builds on macOS
+- ARM builds for Windows and Linux
 
 ## Things to watch
 
